@@ -9,6 +9,7 @@ import socket
 import netifaces as ni
 import urllib3
 import re
+import xml.etree.cElementTree as ET
 
 ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
 print(ip)
@@ -16,7 +17,8 @@ host_port = '49152'
 
 # DEVICE SETTINGS
 
-uuid = '7B788B31-EC1E-445A-B5EF-243274B188E6'
+uuid = '7B788B31-EC1E-445A-B5EF-243274B188B6'
+#os and name should not contain some characters like /
 os = 'Debian 9'
 friendly_name = 'Cannon Connext'
 
@@ -112,7 +114,45 @@ if gotData:
         print(CameraDevDesc)
         print("\n\n")
     r.release_conn()
+"""  
+#Craft MobileDevDesc.xml
+    
+root = ET.Element('root', xmlns="urn:schemas-upnp-org:device-1-0")
+specVersion = ET.SubElement(root, 'specVersion')
+ET.SubElement(specVersion, 'major').text = '1'
+ET.SubElement(specVersion, 'minor').text = '0'
+urlbase = ET.SubElement(root, 'URLBase').text = 'http://' + ip + ':' + '8000/'  #meaning of port needs to be figured out
+device = ET.SubElement(root, 'device')
+ET.SubElement(device, 'deviceType').text = 'urn:schemas-upnp-org:device:Basic:1'
+ET.SubElement(device, 'friendlyName').text = friendly_name
+#I know this sounds wrong, but that's what the Canon App does as well, so whatever
+ET.SubElement(device, 'manufacturer').text = 'CANON INC.'
+ET.SubElement(device, 'manufacturerURL').text = 'http://canon.com/'
+ET.SubElement(device, 'modelDescription').text = 'Canon Mobile Simulator'
+ET.SubElement(device, 'modelName').text = os + '/' + friendly_name
+ET.SubElement(device, 'UDN').text = 'uuid:' + uuid
+serviceList = ET.SubElement(device, 'serviceList')
+service = ET.SubElement(serviceList, 'service')
+ET.SubElement(service, 'serviceType').text = 'urn:schemas-canon-com:service:CameraConnectedMobileService:1'
+ET.SubElement(service, 'serviceId').text = 'urn:schemas-canon-com:serviceId:CameraConnectedMobile'
+ET.SubElement(service, 'SPDURL').text = 'desc/CameraConnectedMobile.xml'
+ET.SubElement(service, 'controlURL').text = 'CameraConnectedMobile/'
+ET.SubElement(service, 'eventSubURL').text = ' '
+nsElement1 = ET.SubElement(service, 'ns:X_SCPDURL')
+nsElement1.text = 'desc_iml/CameraConnectedMobile.xml'
+nsElement1.set('xmln:ns', "urn:schemas-canon-com:schema-imink")
+nsElement2 = ET.SubElement(service, 'ns:X_ExtActionVer')
+nsElement2.text = '1.0'
+nsElement2.set('xmlns:ns', "urn:schemas-canon-com:schema-imink")
+#meaning of X_VendorExtVer unkown to me
+nsElement3 = ET.SubElement(service, 'ns:X_VendorExtVer')
+nsElement3.text = '1-1502.0.0.0'
+nsElement3.set('xmlns:ns', "urn:schemas-canon-com:schema-imink")
+ET.SubElement(device, 'presentationURL').text = '/'
 
+tree = ET.ElementTree(root)
+#tree.write("serverFiles/MobileDevDesc.xml")
+"""
 #proper introduction
 
 notifyBase =  \
