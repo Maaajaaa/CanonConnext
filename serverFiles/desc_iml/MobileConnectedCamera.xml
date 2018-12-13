@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+	<specVersion>
+		<major>1</major>
+		<minor>0</minor>
+	</specVersion>
+	<actionList>
+		<action>
+			<name>SetUsecaseStatus</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">UsecaseStatus</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetObjRecvCapability</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjRecvCapability</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetSendObjInfo</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">SendObjInfo</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetMovieExtProperty</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">MovieExtProperty</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetObjData</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjData</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetResizeProperty</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ResizeProperty</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetObjProperty</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjProperty</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetMovieExtProperty</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">MovieExtProperty</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetObjCount</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjCount</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetObjIDList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjIDList</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetThumbDataList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ThumbDataList</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetObjData</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">ObjData</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetGPSTime</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GPSTime</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetGPSCaptureTimeList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GPSCaptureTimeList</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetGPSListRecvCapability</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GPSListRecvCapability</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetGPSList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GPSList</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetGPSClearList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GPSClearList</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>SetDisconnectStatus</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Set</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">DisconnectStatus</pnpx:X_resourceName>
+		</action>
+		<action>
+			<name>GetGroupedObjIDList</name>
+			<pnpx:X_actKind xmlns:pnpx="urn:schemas-canon-com:schema-imink">Get</pnpx:X_actKind>
+			<pnpx:X_resourceName xmlns:pnpx="urn:schemas-canon-com:schema-imink">GroupedObjIDList</pnpx:X_resourceName>
+		</action>
+	</actionList>
+</scpd>

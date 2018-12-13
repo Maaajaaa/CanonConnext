@@ -17,7 +17,9 @@ host_port = '49152'
 
 # DEVICE SETTINGS
 
-uuid = '7B788B31-EC1E-445A-B5EF-243274B188B6'
+#TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
+
+uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
 #os and name should not contain some characters like /
 os = 'Debian 9'
 friendly_name = 'Cannon Connext'
@@ -122,7 +124,8 @@ root = ET.Element('root', xmlns="urn:schemas-upnp-org:device-1-0")
 specVersion = ET.SubElement(root, 'specVersion')
 ET.SubElement(specVersion, 'major').text = '1'
 ET.SubElement(specVersion, 'minor').text = '0'
-urlbase = ET.SubElement(root, 'URLBase').text = 'http://' + ip + ':' + '8000/'  #meaning of port needs to be figured out
+#IP-address and port for ongoing conversation (this would be another way of hacking the system, but the camera accepts requests from any device in the network once it is "connected" to a device anyway)
+urlbase = ET.SubElement(root, 'URLBase').text = 'http://' + ip + ':' + host_port + '/'
 device = ET.SubElement(root, 'device')
 ET.SubElement(device, 'deviceType').text = 'urn:schemas-upnp-org:device:Basic:1'
 ET.SubElement(device, 'friendlyName').text = friendly_name
@@ -188,7 +191,7 @@ notifyExtension[3] = \
     '\r\n'
     
 #poorly implemented timeout
-for T in range(20):
+for T in range(3):
     # send 3 m-searches of each type
     for i in range(3):
         s.sendto(str.encode(mSerachMsgEOS), ('239.255.255.250', 1900) )
@@ -206,3 +209,14 @@ for T in range(20):
             print(addr, data)        
     except socket.timeout:
         pass
+    
+#get MobileConnectedCamera.xml
+r = http.request('GET', 'http://' + re.search("[0-9.]+", url).group() + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=' + uuid, preload_content=False)
+while True:
+    MobileConnectedCamera = r.read()
+    if not MobileConnectedCamera:
+        break
+    print("\n\nGot MobileConnectedCamera.xml:\n")
+    print(MobileConnectedCamera)
+    print("\n\n")
+r.release_conn()
