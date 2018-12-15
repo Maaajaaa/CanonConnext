@@ -7,9 +7,59 @@ Created on Tue Dec  4 17:10:05 2018
 
 import socket
 import netifaces as ni
-import urllib3
+import urllib3, urllib, posixpath
 import re
 import xml.etree.cElementTree as ET
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from contextlib import contextmanager
+import os
+import threading
+
+
+# HTTPRequestHandler class
+class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):  
+    gotAskedForCCM = False
+    def do_GET(self):
+        """Serve a GET request and send a GET request RIGHT after we get asked for CameraConnectedMobile.xml the first time to skip long waits"""
+        f = self.send_head()
+        if f:
+            try:
+                self.copyfile(f, self.wfile)
+                fname = os.path.basename(f.name)
+                if self.gotAskedForCCM is False and 'CameraConnectedMobile.xml' in fname:
+                    self.gotAskedForCCM = True                
+                    http = urllib3.PoolManager()
+                    r = http.request('GET', 'http://192.168.0.106:49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6', preload_content=False)
+                    while True:
+                        MobileConnectedCamera = r.read()
+                        if not MobileConnectedCamera:
+                            break
+                        print("\n\nGot MobileConnectedCamera.xml:\n")
+                        print(MobileConnectedCamera)
+                        print("\n\n")
+                    r.release_conn()
+            finally:
+                f.close()
+                
+def start_server():
+    print('starting server in separate thread')
+    #change dir to serverFiles
+    with cd('serverFiles/'):
+        server_address = ('', 49152)
+        server = HTTPServer(server_address, testHTTPServer_RequestHandler)
+        server.serve_forever()
+    
+
+
+@contextmanager
+def cd(newdir):
+    prevdir = os.getcwd()
+    os.chdir(os.path.expanduser(newdir))
+    try:
+        yield
+    finally:
+        os.chdir(prevdir)  
+
 
 ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
 print(ip)
@@ -21,7 +71,7 @@ host_port = '49152'
 uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
 
 #os and name should not contain /
-os = 'Debian 9'
+system = 'Debian 9'
 friendly_name = 'Cannon Connext'
 
 # ------------SSDP NOTIFY Messages--------------------
@@ -85,7 +135,7 @@ def defineNotifications(stage):
             'Host: 239.255.255.250:1900\r\n' \
             'Cache-Control: max-age=1800\r\n' \
             'Location: http://'+ ip + ':' + host_port + '/MobileDevDesc.xml\r\n' \
-            'Server: Camera OS/1.0 UPnP/1.0 ' + os + '/' + friendly_name + '/1.0\r\n'\
+            'Server: Camera OS/1.0 UPnP/1.0 ' + system + '/' + friendly_name + '/1.0\r\n'\
         
         notifyExtension[0] = \
             'NT: upnp:rootdevice\r\n' \
@@ -176,7 +226,7 @@ def makeMobileDevDesc():
     ET.SubElement(device, 'manufacturer').text = 'CANON INC.'
     ET.SubElement(device, 'manufacturerURL').text = 'http://www.canon.com/'
     ET.SubElement(device, 'modelDescription').text = 'Canon Mobile Simulator'
-    ET.SubElement(device, 'modelName').text = os + '/' + friendly_name
+    ET.SubElement(device, 'modelName').text = system + '/' + friendly_name
     ET.SubElement(device, 'UDN').text = 'uuid:' + uuid
     serviceList = ET.SubElement(device, 'serviceList')
     service = ET.SubElement(serviceList, 'service')
@@ -198,10 +248,12 @@ def makeMobileDevDesc():
     ET.SubElement(device, 'presentationURL').text = '/'
     
     tree = ET.ElementTree(root)
-    tree.write("serverFiles/MobileDevDesc.xml")
+    tree.write("MobileDevDesc.xml")
     
 
 # let's acutally do something
+t = threading.Thread(target=start_server)
+t.start()
 while True:
     sendNotify(stage=1)
     if gotData:
