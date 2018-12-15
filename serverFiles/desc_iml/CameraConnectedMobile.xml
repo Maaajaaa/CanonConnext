@@ -4,31 +4,32 @@
 		<major>1</major>
 		<minor>0</minor>
 	</specVersion>
-	<actionList xmlns:ns="urn:schemas-canon-com:schema-imink">
+	<actionList>
 		<action>
 			<name>GetObjRecvCapability</name>
-			<ns:X_actKind>Get</X_actKind>
-			<ns:X_resourceName>ObjRecvCapability</X_resourceName>
+			<ns:X_actKind xmlns:ns="urn:schemas-canon-com:schema-imink">Get</ns:X_actKind>
+			<ns:X_resourceName xmlns:ns="urn:schemas-canon-com:schema-imink">ObjRecvCapability</ns:X_resourceName>
 		</action>
 		<action>
 			<name>SetUsecaseStatus</name>
-			<ns:X_actKind>Set</X_actKind>
-			<ns:X_resourceName>UsecaseStatus</X_resourceName>
+			<ns:X_actKind xmlns:ns="urn:schemas-canon-com:schema-imink">Set</ns:X_actKind>
+			<ns:X_resourceName xmlns:ns="urn:schemas-canon-com:schema-imink">UsecaseStatus</ns:X_resourceName>
 		</action>
 		<action>
 			<name>SetSendObjInfo</name>
-			<ns:X_actKind>Set</X_actKind>
-			<ns:X_resourceName>SendObjInfo</X_resourceName>
+			<ns:X_actKind xmlns:ns="urn:schemas-canon-com:schema-imink">Set</ns:X_actKind>
+			<ns:X_resourceName xmlns:ns="urn:schemas-canon-com:schema-imink">SendObjInfo</ns:X_resourceName>
 		</action>
 		<action>
 			<name>SetObjData</name>
-			<ns:X_actKind>Set</X_actKind>
-			<ns:X_resourceName>ObjData</X_resourceName>
+			<ns:X_actKind xmlns:ns="urn:schemas-canon-com:schema-imink">Set</ns:X_actKind>
+			<ns:X_resourceName xmlns:ns="urn:schemas-canon-com:schema-imink">ObjData</ns:X_resourceName>
 		</action>
 		<action>
 			<name>SetMovieExtProperty</name>
-			<ns:X_actKind>Set</X_actKind>
-			<ns:X_resourceName>MovieExtProperty</X_resourceName>
+			<ns:X_actKind xmlns:ns="urn:schemas-canon-com:schema-imink">Set</ns:X_actKind>
+			<ns:X_resourceName xmlns:ns="urn:schemas-canon-com:schema-imink">MovieExtProperty</ns:X_resourceName>
 		</action>
 	</actionList>
 </scpd>
+
