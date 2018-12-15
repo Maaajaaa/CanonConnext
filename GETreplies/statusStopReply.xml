@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<ResultSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <Status>Stop</Status>
+  <MajorVersion>0</MajorVersion>
+  <MinorVersion>1</MinorVersion>
+</ResultSet>
