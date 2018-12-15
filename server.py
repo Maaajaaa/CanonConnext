@@ -9,7 +9,18 @@ Created on Thu Dec 13 20:02:24 2018
 from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 from io import BytesIO
 import os
+from requests import Request, Session
+import time
 
+import socket
+import netifaces as ni
+
+def synScan(target='192.168.0.106', port=7):
+    sock = socket.socket(ni.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10)
+    result = sock.connect_ex((target, port))
+    return result
+    
 # HTTPRequestHandler class
 class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):  
     gotAskedForCCM = False
@@ -98,7 +109,41 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/statusStopReply.xml') as replyFile:
                     replyStr = replyFile.read()  
                     self.sendResponse(replyStr)                     
-            print('Status Stop request handled')
+            print('Status Stop request handled, trying to POST StatusRunRequest afer some SYN-scans')
+            for i in range(3):
+                    synScan()
+                    time.sleep(1.4)
+            print('Go:')
+            with open('POSTrequests/statusRunRequest.xml') as requestFile:
+                #http = urllib3.PoolManager()
+                #r = http.request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', )
+                s = Session()
+
+                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
+                prepped = req.prepare()
+                
+                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+                
+                resp = s.send(prepped)
+                print(resp.status_code, resp.content)
+                
+                time.sleep(3)
+                synScan()
+                time.sleep(3)
+                
+                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+                prepped = req.prepare()
+                
+                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+                
+                resp = s.send(prepped)
+                print(resp.status_code, resp.content)
+                
+            """r = requests.post('')
+            print('We got something, do we?')
+            print(r.status_code, r.reason)
+            print(r.text)"""
+                
             return
         
         if not requestKnown:
