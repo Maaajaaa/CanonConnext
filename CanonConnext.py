@@ -18,7 +18,8 @@ import os
 import threading
 
 runSSDPOnAndOn = True
-sendNotifyStage2 = False
+connectedToCamera = False
+debug = False
 
 def synScan(target='192.168.0.106', port=7):
     sock = socket.socket(ni.AF_INET, socket.SOCK_STREAM)
@@ -45,8 +46,8 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             #TODO: put this in a try loop
             with open('GETreplies/statusRunReply.xml') as replyFile:
                     replyStr = replyFile.read()  
-                    self.sendResponse(replyStr)                     
-            print('Status Run request handled')
+                    self.sendResponse(replyStr)      
+            if debug:print('Status Run request handled')
             return
             
         #Acknowledge CapabilityInfo
@@ -55,7 +56,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/null.xml') as replyFile:
                     replyStr = replyFile.read()
                     self.sendResponse(replyStr)
-            print('CapabilityInfo acknowledged')
+            if debug:print('CapabilityInfo acknowledged')
             return
             
         #Acknowledge CameraInfo
@@ -64,7 +65,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/null.xml') as replyFile:
                     replyStr = replyFile.read()
                     self.sendResponse(replyStr)      
-            print('CameraInfo acknowledged')
+            if debug:print('CameraInfo acknowledged')
             return
         
         #Acknowledge NCFData
@@ -73,7 +74,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/null.xml') as replyFile:
                     replyStr = replyFile.read()
                     self.sendResponse(replyStr)      
-            print('NFCData acknowledged')
+            if debug:print('NFCData acknowledged')
             return
         
         #Detect Status Stop
@@ -83,35 +84,9 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/statusStopReply.xml') as replyFile:
                     replyStr = replyFile.read()  
                     self.sendResponse(replyStr)                     
-            print('Status Stop request handled, trying to POST StatusRunRequest after some SSDP')
-            with open('POSTrequests/statusRunRequest.xml') as requestFile:
-                              
-                s = Session()
-                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
-                prepped = req.prepare()
-                
-                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-                global sendNotifyStage2
-                sendNotifyStage2 = True
-                                
-                for i in range(10):
-                    sleep(1)
-                    synScan()
-                
-                resp = s.send(prepped)
-                print(resp.status_code, resp.content)
-                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
-                prepped = req.prepare()
-                
-                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-                resp = s.send(prepped)
-                print(resp.status_code, resp.content)
-                
-            """r = requests.post('')
-            print('We got something, do we?')
-            print(r.status_code, r.reason)
-            print(r.text)"""
-                
+            print("Status Stop request handled, in other words: We're in")
+            global connectedToCamera
+            connectedToCamera = True   
             return
         
         if not requestKnown:
@@ -183,9 +158,10 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                         MobileConnectedCamera = r.read()
                         if not MobileConnectedCamera:
                             break
-                        print("\n\nGot MobileConnectedCamera.xml:\n")
-                        print(MobileConnectedCamera)
-                        print("\n\n")
+                        if debug:
+                            print("\n\nGot MobileConnectedCamera.xml:\n")
+                            print(MobileConnectedCamera)
+                            print("\n\n")
                     r.release_conn()
             finally:
                 f.close()
@@ -325,7 +301,7 @@ def sendNotify(stage):
             data, addr = s.recvfrom(65507)
             if data!="":
                 gotData=1
-            print(addr, data)
+            if debug: print(addr, data)
     except socket.timeout:
         pass
 
@@ -343,9 +319,10 @@ def getCameraDevDesc():
             CameraDevDesc = r.read()
             if not CameraDevDesc:
                 break
-            print("\n\nGot CameraDevDesc.xml:\n")
-            print(CameraDevDesc)
-            print("\n\n")
+            if debug:
+                print("\n\nGot CameraDevDesc.xml:\n")
+                print(CameraDevDesc)
+                print("\n\n")
         r.release_conn()
         
 def makeMobileDevDesc():
@@ -395,7 +372,7 @@ t.start()
 t2 = threading.Thread(target=imink_response_sever)
 t2.start()
 
-while True:
+while not connectedToCamera:
     if runSSDPOnAndOn:
         sendNotify(stage=1)
         if gotData:
@@ -406,7 +383,21 @@ while True:
     else:
         sleep(0.01)
         
-    if sendNotifyStage2:
-        sendNotify(stage=2)
-        sendNotifyStage2 = False
+#We're in like Flinn
+with open('POSTrequests/statusRunRequest.xml') as requestFile:
+                              
+    s = Session()
+    
+    req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
+    prepped = req.prepare()    
+    prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
+    resp = s.send(prepped)
+    print(resp.status_code, resp.content)
+    
+    req = Request('GET', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+    prepped = req.prepare()    
+    prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+    resp = s.send(prepped)
+    print(resp.status_code, resp.content)
+
         
