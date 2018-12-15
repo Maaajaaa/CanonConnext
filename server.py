@@ -13,12 +13,16 @@ import os
 # HTTPRequestHandler class
 class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):  
     gotAskedForCCM = False
+    server_version = 'OS/Version UPnP/1.0'
+    sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
+
     def do_POST(self):
         """Methode to handle POST requests"""
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
         bodyStr = body.decode('utf-8')
         requestKnown = False
+        
         #Detecting Run status request and answering with statusReplyRun.xml:
         """
         <ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
@@ -32,8 +36,9 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
                     replyStr = replyFile.read()  
                     self.sendResponse(replyStr)                     
             print('Status Run request handled')
+            return
             
-        #Acknoledge CapabilityInfo
+        #Acknowledge CapabilityInfo
         """
         <ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
           <Pull_Operating>TRUE</Pull_Operating>
@@ -46,8 +51,55 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
         """
         if '<Pull_Operating>' in bodyStr:
             requestKnown = True
-            self.sendResponse('')
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)
             print('CapabilityInfo acknowledged')
+            return
+            
+        #Acknowledge CameraInfo
+        """
+        <ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+          <CardProtect>FALSE</CardProtect>
+        </ParamSet>
+        """
+        if '<CardProtect>' in bodyStr:
+            requestKnown = True
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)      
+            print('CameraInfo acknowledged')
+            return
+        
+        #Acknowledge NCFData
+        """
+        <ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+          <AARData>jp.co.canon.ic.cameraconnect</AARData>
+          <URIData>canon-a01</URIData>
+        </ParamSet>
+        """
+        if '<AARData>' in bodyStr:
+            requestKnown = True
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)      
+            print('NFCData acknowledged')
+            return
+        
+        #Detect Status Stop
+        """
+        <ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+          <Status>Stop</Status>
+        </ParamSet>
+        """
+        if '<Status>Stop</Status>' in bodyStr:
+            requestKnown = True
+            #TODO: put this in a try loop
+            with open('GETreplies/statusStopReply.xml') as replyFile:
+                    replyStr = replyFile.read()  
+                    self.sendResponse(replyStr)                     
+            print('Status Stop request handled')
+            return
         
         if not requestKnown:
             response = BytesIO()
@@ -64,12 +116,17 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
         """Takes a string and sends it as a reponse to a GET-request with apporpriate headers"""
         #header
         content_length = len(str.encode(bodyStr))
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Length", content_length)
-        if content_length > 0:
+        if content_length is 0:
+            self.send_response_only(HTTPStatus.OK)            
+            self.send_header("Content-Length", content_length)
+            self.send_header('Server', self.version_string())
+            self.send_header('Date', self.date_time_string())
+        else:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Length", content_length)
+        if content_length is not 0:
             self.send_header("Content-Type", 'text/xml ; charset=utf-8')
         self.end_headers()
-        #if content_length > 0:
         response = BytesIO()
         response.write(str.encode(bodyStr))
         self.wfile.write(response.getvalue())

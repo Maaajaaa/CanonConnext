@@ -190,7 +190,7 @@ while True:
             '\r\n'
             
         #poorly implemented timeout
-        for t in range(3):
+        for t in range(2):
             # send 3 m-searches of each type
             for i in range(3):
                 s.sendto(str.encode(mSerachMsgEOS), ('239.255.255.250', 1900) )
@@ -210,7 +210,7 @@ while True:
                 pass
             
         #get MobileConnectedCamera.xml
-        r = http.request('GET', 'http://' + re.search("[0-9.]+", url).group() + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=' + uuid, preload_content=False)
+        """r = http.request('GET', 'http://' + re.search("[0-9.]+", url).group() + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=' + uuid, preload_content=False)
         while True:
             MobileConnectedCamera = r.read()
             if not MobileConnectedCamera:
@@ -218,4 +218,4 @@ while True:
             print("\n\nGot MobileConnectedCamera.xml:\n")
             print(MobileConnectedCamera)
             print("\n\n")
-        r.release_conn()
+        r.release_conn()"""
