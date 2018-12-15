@@ -18,6 +18,7 @@ import os
 import threading
 
 runSSDPOnAndOn = True
+sendNotifyStage2 = False
 
 def synScan(target='192.168.0.106', port=7):
     sock = socket.socket(ni.AF_INET, socket.SOCK_STREAM)
@@ -85,29 +86,26 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             print('Status Stop request handled, trying to POST StatusRunRequest after some SSDP')
             with open('POSTrequests/statusRunRequest.xml') as requestFile:
                               
-                #http = urllib3.PoolManager()
-                #r = http.request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', )
                 s = Session()
-
                 req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
                 prepped = req.prepare()
                 
                 prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-                
-                #resp = s.send(prepped)
-                #print(resp.status_code, resp.content)
-                
-                for i in range(40):
+                global sendNotifyStage2
+                sendNotifyStage2 = True
+                                
+                for i in range(10):
                     sleep(1)
-                    synScan()   
+                    synScan()
                 
+                resp = s.send(prepped)
+                print(resp.status_code, resp.content)
                 req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
                 prepped = req.prepare()
                 
                 prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-                
-                #resp = s.send(prepped)
-                #print(resp.status_code, resp.content)
+                resp = s.send(prepped)
+                print(resp.status_code, resp.content)
                 
             """r = requests.post('')
             print('We got something, do we?')
@@ -176,7 +174,9 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                 self.copyfile(f, self.wfile)
                 fname = os.path.basename(f.name)
                 if self.gotAskedForCCM is False and 'CameraConnectedMobile.xml' in fname:
-                    self.gotAskedForCCM = True                
+                    self.gotAskedForCCM = True
+                    global runSSDPOnAndOn
+                    runSSDPOnAndOn = False
                     http = urllib3.PoolManager()
                     r = http.request('GET', 'http://192.168.0.106:49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6', preload_content=False)
                     while True:
@@ -396,10 +396,17 @@ t2 = threading.Thread(target=imink_response_sever)
 t2.start()
 
 while True:
-    sendNotify(stage=1)
-    if gotData:
-        getCameraDevDesc()
-        makeMobileDevDesc()
+    if runSSDPOnAndOn:
+        sendNotify(stage=1)
+        if gotData:
+            getCameraDevDesc()
+            makeMobileDevDesc()
+            sendNotify(stage=2)
+            gotData=False
+    else:
+        sleep(0.01)
+        
+    if sendNotifyStage2:
         sendNotify(stage=2)
-        gotData=False
+        sendNotifyStage2 = False
         
