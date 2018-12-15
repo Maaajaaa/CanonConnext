@@ -109,12 +109,65 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
             with open('GETreplies/statusStopReply.xml') as replyFile:
                     replyStr = replyFile.read()  
                     self.sendResponse(replyStr)                     
-            print('Status Stop request handled, trying to POST StatusRunRequest afer some SYN-scans')
-            for i in range(3):
-                    synScan()
-                    time.sleep(1.4)
-            print('Go:')
+            print('Status Stop request handled, trying to POST StatusRunRequest after some SSDP')
             with open('POSTrequests/statusRunRequest.xml') as requestFile:
+                
+                
+                ## WAAAAAAAAAAY too messy!!!!!!!!!!!!!!
+                #TODO: UNMESS
+                
+                #------- SEND SSDP (don't ask me why) 
+                
+                notifyExtension = ['' for x in range(4)]
+                
+                ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
+                print(ip)
+                host_port = '49152'
+                
+                # DEVICE SETTINGS
+                
+                #TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
+                
+                uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
+                #os and name should not contain some characters like /
+                os = 'Debian 9'
+                friendly_name = 'Cannon Connext'
+
+                notifyBase =  \
+                    'NOTIFY * HTTP/1.1\r\n' \
+                    'Host: 239.255.255.250:1900\r\n' \
+                    'Cache-Control: max-age=1800\r\n' \
+                    'Location: http://'+ ip + ':' + host_port + '/MobileDevDesc.xml\r\n' \
+                    'Server: Camera OS/1.0 UPnP/1.0 ' + os + '/' + friendly_name + '/1.0\r\n'\
+                
+                notifyExtension[0] = \
+                    'NT: upnp:rootdevice\r\n' \
+                    'NTS: ssdp:alive\r\n' \
+                    'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
+                    '\r\n'
+                    
+                notifyExtension[1] = \
+                    'NT: uuid:' + uuid + '\r\n' \
+                    'NTS: ssdp:alive\r\n' \
+                    'USN: uuid:' + uuid + '\r\n' \
+                    '\r\n'
+                    
+                notifyExtension[2] = \
+                    'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
+                    'NTS: ssdp:alive\r\n' \
+                    'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
+                    '\r\n'
+                    
+                notifyExtension[3] = \
+                    'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
+                    'NTS: ssdp:alive\r\n' \
+                    'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
+                    '\r\n'
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+                s.settimeout(3)
+                for j in range(4):
+                    s.sendto(str.encode(notifyBase + notifyExtension[i]), ('239.255.255.250', 1900) )
+                
                 #http = urllib3.PoolManager()
                 #r = http.request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', )
                 s = Session()
@@ -124,20 +177,20 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
                 
                 prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
                 
-                resp = s.send(prepped)
-                print(resp.status_code, resp.content)
+                #resp = s.send(prepped)
+                #print(resp.status_code, resp.content)
                 
-                time.sleep(3)
-                synScan()
-                time.sleep(3)
+                for i in range(40):
+                    time.sleep(1)
+                    synScan()   
                 
                 req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
                 prepped = req.prepare()
                 
                 prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
                 
-                resp = s.send(prepped)
-                print(resp.status_code, resp.content)
+                #resp = s.send(prepped)
+                #print(resp.status_code, resp.content)
                 
             """r = requests.post('')
             print('We got something, do we?')

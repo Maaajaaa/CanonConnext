@@ -129,3 +129,4 @@ NTS: ssdp:alive
 Server: Camera OS/1.0 UPnP/1.0 Android 7.1.2/Redmi 5/1.0
 USN: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5::urn:schemas-canon-com:service:CameraConnectedMobileService:1
 """
+
