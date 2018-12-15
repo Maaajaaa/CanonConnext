@@ -130,3 +130,46 @@ Server: Camera OS/1.0 UPnP/1.0 Android 7.1.2/Redmi 5/1.0
 USN: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5::urn:schemas-canon-com:service:CameraConnectedMobileService:1
 """
 
+# ---------------------------- POST-requests from camera----------------------------
+
+#Detecting Run status request and answering with statusReplyRun.xml:
+"""
+<ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <Status>Run</Status>
+</ParamSet>
+"""
+
+
+#Acknowledge CapabilityInfo
+"""
+<ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <Pull_Operating>TRUE</Pull_Operating>
+  <GPS_Operating>TRUE</GPS_Operating>
+  <RemoteCapture_Operating>TRUE</RemoteCapture_Operating>
+  <ConnectionMode>1</ConnectionMode>
+  <GroupType>Basic</GroupType>
+  <CustomMode>ModeA&amp;ModeC</CustomMode>
+</ParamSet>
+"""
+
+#Acknowledge CameraInfo
+"""
+<ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <CardProtect>FALSE</CardProtect>
+</ParamSet>
+"""
+
+#Acknowledge NCFData
+"""
+<ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <AARData>jp.co.canon.ic.cameraconnect</AARData>
+  <URIData>canon-a01</URIData>
+</ParamSet>
+"""
+
+#Detect Status Stop
+"""
+<ParamSet xmlns="urn:schemas-canon-com:service:CameraConnectedMobileService:1">
+  <Status>Stop</Status>
+</ParamSet>
+"""

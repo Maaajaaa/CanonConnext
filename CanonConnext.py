@@ -7,17 +7,166 @@ Created on Tue Dec  4 17:10:05 2018
 
 import socket
 import netifaces as ni
-import urllib3, urllib, posixpath
+import urllib3
+from io import BytesIO
+from requests import Request, Session
+from time import sleep
 import re
 import xml.etree.cElementTree as ET
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from contextlib import contextmanager
+from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 import os
 import threading
 
+runSSDPOnAndOn = True
+
+def synScan(target='192.168.0.106', port=7):
+    sock = socket.socket(ni.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10)
+    result = sock.connect_ex((target, port))
+    return result
+    
+# HTTPRequestHandler class
+class iminkRequestHandler(SimpleHTTPRequestHandler):  
+    gotAskedForCCM = False
+    server_version = 'OS/Version UPnP/1.0'
+    sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
+
+    def do_POST(self):
+        """Methode to handle POST requests"""
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length)
+        bodyStr = body.decode('utf-8')
+        requestKnown = False
+        
+        #Detecting Run status request and answering with statusReplyRun.xml:
+        if '<Status>Run</Status>' in bodyStr:
+            requestKnown = True
+            #TODO: put this in a try loop
+            with open('GETreplies/statusRunReply.xml') as replyFile:
+                    replyStr = replyFile.read()  
+                    self.sendResponse(replyStr)                     
+            print('Status Run request handled')
+            return
+            
+        #Acknowledge CapabilityInfo
+        if '<Pull_Operating>' in bodyStr:
+            requestKnown = True
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)
+            print('CapabilityInfo acknowledged')
+            return
+            
+        #Acknowledge CameraInfo
+        if '<CardProtect>' in bodyStr:
+            requestKnown = True
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)      
+            print('CameraInfo acknowledged')
+            return
+        
+        #Acknowledge NCFData
+        if '<AARData>' in bodyStr:
+            requestKnown = True
+            with open('GETreplies/null.xml') as replyFile:
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)      
+            print('NFCData acknowledged')
+            return
+        
+        #Detect Status Stop
+        if '<Status>Stop</Status>' in bodyStr:
+            requestKnown = True
+            #TODO: put this in a try loop
+            with open('GETreplies/statusStopReply.xml') as replyFile:
+                    replyStr = replyFile.read()  
+                    self.sendResponse(replyStr)                     
+            print('Status Stop request handled, trying to POST StatusRunRequest after some SSDP')
+            with open('POSTrequests/statusRunRequest.xml') as requestFile:
+                              
+                #http = urllib3.PoolManager()
+                #r = http.request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', )
+                s = Session()
+
+                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
+                prepped = req.prepare()
+                
+                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+                
+                #resp = s.send(prepped)
+                #print(resp.status_code, resp.content)
+                
+                for i in range(40):
+                    sleep(1)
+                    synScan()   
+                
+                req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+                prepped = req.prepare()
+                
+                prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+                
+                #resp = s.send(prepped)
+                #print(resp.status_code, resp.content)
+                
+            """r = requests.post('')
+            print('We got something, do we?')
+            print(r.status_code, r.reason)
+            print(r.text)"""
+                
+            return
+        
+        if not requestKnown:
+            response = BytesIO()
+            self.send_response(200)
+            self.end_headers()
+            response.write(body)
+            print('got unknown POST request')
+            print('header')
+            print(self.headers)
+            print('body: ' + bodyStr)
+            self.wfile.write(response.getvalue())
+        
+    def sendResponse(self, bodyStr):
+        """Takes a string and sends it as a reponse to a GET-request with apporpriate headers"""
+        #header
+        content_length = len(str.encode(bodyStr))
+        if content_length is 0:
+            self.send_response_only(HTTPStatus.OK)            
+            self.send_header("Content-Length", content_length)
+            self.send_header('Server', self.version_string())
+            self.send_header('Date', self.date_time_string())
+        else:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Length", content_length)
+        if content_length is not 0:
+            self.send_header("Content-Type", 'text/xml ; charset=utf-8')
+        self.end_headers()
+        response = BytesIO()
+        response.write(str.encode(bodyStr))
+        self.wfile.write(response.getvalue())
+        
+    def do_GET(self):
+        """Serve a GET request and send a request RIGHT after we get asked for CameraConnectedMobile.xml the first time"""
+        f = self.send_head()
+        if f:
+            try:
+                self.copyfile(f, self.wfile)
+                fname = os.path.basename(f.name)
+                if self.gotAskedForCCM is False and 'CameraConnectedMobile.xml' in fname:
+                    self.gotAskedForCCM = True
+            finally:
+                f.close()
+                
+def imink_response_sever():
+    print('starting server in separate thread')
+    #change dir to serverFiles
+    server_address = ('', 8615)
+    server = HTTPServer(server_address, iminkRequestHandler)
+    server.serve_forever()
 
 # HTTPRequestHandler class
-class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):  
+class SSDP_RequestHandler(SimpleHTTPRequestHandler):  
     gotAskedForCCM = False
     def do_GET(self):
         """Serve a GET request and send a GET request RIGHT after we get asked for CameraConnectedMobile.xml the first time to skip long waits"""
@@ -41,25 +190,13 @@ class testHTTPServer_RequestHandler(SimpleHTTPRequestHandler):
             finally:
                 f.close()
                 
-def start_server():
+def start_ssdp_response_server():
     print('starting server in separate thread')
     #change dir to serverFiles
-    with cd('serverFiles/'):
-        server_address = ('', 49152)
-        server = HTTPServer(server_address, testHTTPServer_RequestHandler)
-        server.serve_forever()
+    server_address = ('', 49152)
+    server = HTTPServer(server_address, SSDP_RequestHandler)
+    server.serve_forever()
     
-
-
-@contextmanager
-def cd(newdir):
-    prevdir = os.getcwd()
-    os.chdir(os.path.expanduser(newdir))
-    try:
-        yield
-    finally:
-        os.chdir(prevdir)  
-
 
 ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
 print(ip)
@@ -251,13 +388,18 @@ def makeMobileDevDesc():
     tree.write("MobileDevDesc.xml")
     
 
-# let's acutally do something
-t = threading.Thread(target=start_server)
+# start server treads
+t = threading.Thread(target=start_ssdp_response_server)
 t.start()
+
+t2 = threading.Thread(target=imink_response_sever)
+t2.start()
+
 while True:
     sendNotify(stage=1)
     if gotData:
         getCameraDevDesc()
         makeMobileDevDesc()
         sendNotify(stage=2)
+        gotData=False
         
