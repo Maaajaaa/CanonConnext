@@ -18,12 +18,16 @@ import os
 import threading
 from bitarray import bitarray
 
+# ---- GLOBAL VARIABLES -------
+
 runSSDPOnAndOn = True
 connectedToCamera = False
 debug = False
 
 cameraIP = '192.168.0.106'
-    
+cameraObjects = []
+totalNumOfItemsOnCamera = 0
+
 # HTTPRequestHandler class
 class iminkRequestHandler(SimpleHTTPRequestHandler):  
     gotAskedForCCM = False
@@ -372,12 +376,10 @@ def extractThumbFromExifHeader(exitfbytes):
     """
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
-    refbytes = exifbits.tobytes()
-    #print(refbytes.hex())
-    print(exifbits.tostring())
     
     ffd8 = bitarray()
-    ffd8.frombytes(b'\xFF\xD8')
+    #FFE1 494is the thumb
+    ffd8.frombytes(b'\xFF\xD8\xFF\xDB')
     
     ffd9 = bitarray()
     ffd9.frombytes(b'\xFF\xD9')
@@ -388,10 +390,29 @@ def extractThumbFromExifHeader(exitfbytes):
     print(ffd8s)
     
     print(ffd9s)
-    #cut from 3rd occurence of ffd8 to ffd9 but include ffd9 which is 16 BITS long
-    exifbits = exifbits[ffd8s[2]:ffd9s[0]+16]
+    #cut from the occurence of ffd8ffe1 to ffd9 but include ffd9 which is 16 BITS long
     
-    return exifbits.tobytes()
+    for i in range(0, len(ffd8s)):                      # 12kB = 96kbit
+        print(i)
+        print(ffd9s[len(ffd9s)-1]+16)
+        print('-')
+        print(ffd8s[i])
+        if ffd9s[len(ffd9s)-1]+16 - ffd8s[i] > 0:
+            exifbits = exifbits[ffd8s[i]:ffd9s[len(ffd9s)-1]+16]
+    
+            with open('pyExtractedThumb.jpg', 'wb') as file:
+                exifbits.tofile(file)
+            
+            return exifbits.tobytes()
+
+def getThumb(number):
+    #make sure we don't request an invalid EXIF header / thumb
+    if number < totalNumOfItemsOnCamera:        
+        #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
+        #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
+        r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
+        print(len(r2.content))
+        return extractThumbFromExifHeader(r2.content)
 
 # start server treads
 t = threading.Thread(target=start_ssdp_response_server)
@@ -412,52 +433,103 @@ while not connectedToCamera:
         sleep(0.01)
         
 #We're in like Flinn
-with open('POSTrequests/statusRunRequest.xml') as requestFile:
-                              
+with open('POSTrequests/statusRunRequest.xml') as requestFile:                          
     s = Session()
-    
     req = Request('POST', 'http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
     prepped = req.prepare()    
     prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
     resp = s.send(prepped)
     print(resp.status_code, resp.content)
     
-    req = Request('GET', 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
-    prepped = req.prepare()    
-    prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-    resp = s.send(prepped)
-    print(resp.status_code, resp.content)
-    if resp.status_code is 200:
-        #removing the namespace akes parsing much simpler
-        resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
-        #print(resultSet.tag)
-        #TODO: could that be topped out?
-        totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
-        objID1 = resultSet.find('ObjIDList-1')
+req = Request('GET', 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+prepped = req.prepare()    
+prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
+resp = s.send(prepped)
+print(resp.status_code, resp.content)
+if resp.status_code is 200:
+    #removing the namespace akes parsing much simpler
+    resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
+    #print(resultSet.tag)
+    #TODO: could that be topped out?
+    totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
+    
+    #create matrix to store IDs, types and group numbers
+    cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
+    
+    #get IDs, types and groups
+    objectsIndexed = 0
+    while objectsIndexed < totalNumOfItemsOnCamera:
+        #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
+        #meaning of GroupType is unlear to me
+        r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
+        resultSet = ET.fromstring(removeXMLNamespace(r.text) )
+        #print("got:" + r.text)
+        for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
+            listIDStr = str(listID)
+            cameraObjects[objectsIndexed]={'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
+              'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
+              'groupNbr':resultSet.find('GroupedNumList-' + listIDStr).text}
+            objectsIndexed += 1
+        print('Got soo many Elements:' + str(objectsIndexed))
         
-        #create matrix to store IDs, types and group numbers
-        cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
-        
-        #get IDs, types and groups
-        objectsIndexed = 0
-        while objectsIndexed < totalNumOfItemsOnCamera:
-            #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
-            #meaning of GroupType is unlear to me
-            r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
-            resultSet = ET.fromstring(removeXMLNamespace(r.text) )
-            #print("got:" + r.text)
-            for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
-                listIDStr = str(listID)
-                cameraObjects[objectsIndexed]={'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
-                  'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
-                  'groupNbr':resultSet.find('GroupedNumList-' + listIDStr).text}
-                objectsIndexed += 1
-            print('Got soo many Elements:' + str(objectsIndexed))
+    
+    #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
+    #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
+    r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[totalNumOfItemsOnCamera-1]['objID']))
+    print(len(r2.content))
+    extractThumbFromExifHeader(r2.content)
+    
+    #start GUI to display thumbs
+    
+    from PyQt5 import QtWidgets
+    from PyQt5.QtGui import QIcon, QPixmap
+    from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem
+    from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
+    #import PyQt5 as Qt
+    import sys
+    
+    class HelloWindow(QMainWindow):
+        def __init__(self):
+            QMainWindow.__init__(self)
+            self.setMinimumSize(QSize(1800, 1000))    
+            self.setWindowTitle("Hello world") 
+    
+            self.listWidget = GalleryWidget()
+            self.setCentralWidget(self.listWidget)
             
+        def addPic(self,pixmap,name):
+            self.listWidget.addItem(QListWidgetItem(QIcon(pixmap),name))
+            
+    class GalleryWidget(QListWidget):
+        def __init__(self, parent=None):
+            super(GalleryWidget, self).__init__(parent)
+            self.setViewMode(QListWidget.IconMode)
+            self.setIconSize(QSize(200,200))
+            self.setResizeMode(QListWidget.Adjust)
+            
+    class SomeObject(QObject):
+    
+        finished = pyqtSignal()
+        addPic = pyqtSignal(QPixmap, str)
+    
+        def long_running(self):
+            count = 0
+            for i in range(totalNumOfItemsOnCamera):
+                qp = QPixmap()
+                qp.loadFromData(getThumb(i))
+                self.addPic.emit(qp, 'name')
+            #self.finished.emit()
+
+    app = QtWidgets.QApplication(sys.argv)
+    mainWin = HelloWindow()
+    mainWin.show()
+    objThread = QThread()
+    obj = SomeObject()
+    obj.moveToThread(objThread)
+    obj.finished.connect(objThread.quit)
+    objThread.started.connect(obj.long_running)
+    #objThread.finished.connect(app.exit)
+    obj.addPic.connect(mainWin.addPic)
+    objThread.start()
         
-        #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
-        #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
-        r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(objID1))
-        print(r2.status_code)
-        print(r2.text)
-        thumbBytes = extractThumbFromExifHeader(r2.content)
+    sys.exit( app.exec_() )

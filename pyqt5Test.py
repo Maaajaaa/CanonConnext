@@ -8,11 +8,11 @@ Created on Sun Dec 16 15:50:30 2018
 
 import sys
 from PyQt5 import QtWidgets
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QMainWindow, QLabel, QGridLayout, QWidget, QListWidget, QListWidgetItem
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem
 from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
 import time
-import PyQt5 as Qt
+#import PyQt5 as Qt
 
 class HelloWindow(QMainWindow):
     def __init__(self):
@@ -23,8 +23,9 @@ class HelloWindow(QMainWindow):
         self.listWidget = GalleryWidget()
         self.setCentralWidget(self.listWidget)
         
-    def addPic(self,name):
-        self.listWidget.addItem(QListWidgetItem(QIcon('thumbSmall.jpg'),name))
+    def addPic(self,pixmap,name):
+        print(pixmap)
+        self.listWidget.addItem(QListWidgetItem(QIcon(pixmap),name))
         
 class GalleryWidget(QListWidget):
     def __init__(self, parent=None):
@@ -37,16 +38,18 @@ class GalleryWidget(QListWidget):
 class SomeObject(QObject):
 
     finished = pyqtSignal()
-    addPic = pyqtSignal(str)
-    
+    addPic = pyqtSignal(QPixmap, str)
 
     def long_running(self):
         count = 0
         while count < 20:
             time.sleep(0.1)
             print("B Increasing")
+            qp = QPixmap()
+            qp.load('pyExtractedThumb.jpg')
+            #qp.loadFromData(extractThumbFromExifHeader(r2.content))
             count += 1
-            self.addPic.emit('name')
+            self.addPic.emit(qp, 'name')
         self.finished.emit()
 
 
@@ -54,7 +57,6 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     mainWin = HelloWindow()
     mainWin.show()
-    mainWin.addPic('name')
     objThread = QThread()
     
     obj = SomeObject()
