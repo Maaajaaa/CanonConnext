@@ -9,23 +9,20 @@ import socket
 import netifaces as ni
 import urllib3
 from io import BytesIO
-from requests import Request, Session
+from requests import Request, Session, get
 from time import sleep
 import re
 import xml.etree.cElementTree as ET
 from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 import os
 import threading
+from bitarray import bitarray
 
 runSSDPOnAndOn = True
 connectedToCamera = False
 debug = False
 
-def synScan(target='192.168.0.106', port=7):
-    sock = socket.socket(ni.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10)
-    result = sock.connect_ex((target, port))
-    return result
+cameraIP = '192.168.0.106'
     
 # HTTPRequestHandler class
 class iminkRequestHandler(SimpleHTTPRequestHandler):  
@@ -153,7 +150,7 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                     global runSSDPOnAndOn
                     runSSDPOnAndOn = False
                     http = urllib3.PoolManager()
-                    r = http.request('GET', 'http://192.168.0.106:49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6', preload_content=False)
+                    r = http.request('GET', 'http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6', preload_content=False)
                     while True:
                         MobileConnectedCamera = r.read()
                         if not MobileConnectedCamera:
@@ -364,6 +361,34 @@ def makeMobileDevDesc():
     tree = ET.ElementTree(root)
     tree.write("MobileDevDesc.xml")
     
+def removeXMLNamespace(xmlstring):
+    xmlstring = re.sub(r'\sxmlns="[^"]+"', '', xmlstring, count=1)
+    return xmlstring
+
+def extractThumbFromExifHeader(exitfbytes):
+    """
+    Extract JPEG thumbnail from Exif header, this method is pretty hacky and 
+    only works well in THIS case because they're all the same
+    """
+    exifbits = bitarray()
+    exifbits.frombyes(exitfbytes)
+    
+    ffd8 = bitarray()
+    ffd8.frombytes(b'\xFF\xD8')
+    
+    ffd9 = bitarray()
+    ffd9.frombytes(b'\xFF\xD9')
+    
+    ffd8s = exifbits.search(ffd8) 
+    ffd9s = exifbits.search(ffd9)
+    
+    print(ffd8s)
+    
+    print(ffd9s)
+    #cut from 3rd occurence of ffd8 to ffd9 but include ffd9 which is 16 BITS long
+    exifbits = exifbits[ffd8s[2]:ffd9s[0]+16]
+    
+    return exifbits.tobytes()
 
 # start server treads
 t = threading.Thread(target=start_ssdp_response_server)
@@ -388,16 +413,51 @@ with open('POSTrequests/statusRunRequest.xml') as requestFile:
                               
     s = Session()
     
-    req = Request('POST', 'http://192.168.0.106:8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
+    req = Request('POST', 'http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
     prepped = req.prepare()    
     prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
     resp = s.send(prepped)
     print(resp.status_code, resp.content)
     
-    req = Request('GET', 'http://192.168.0.106:8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+    req = Request('GET', 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
     prepped = req.prepare()    
     prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
     resp = s.send(prepped)
     print(resp.status_code, resp.content)
-
+    if resp.status_code is 200:
+        #removing the namespace akes parsing much simpler
+        resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
+        #print(resultSet.tag)
+        totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
+        tree = ET.ElementTree(resultSet)
+        tree.write('myLittleResultSet.xml')
         
+        objID1 = resultSet.find('ObjIDList-1')
+        #get IDs, types and groups
+        objectsIndexed = 0
+        #make an XML to save the properties
+        camerasObjects = ET.Element('camerasObects')
+        while objectsIndexed < totalNumOfItemsOnCamera:
+            #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
+            #meaning of GroupType is unlear to me
+            r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
+            resultSet = ET.fromstring(removeXMLNamespace(r.text) )
+            #print("got:" + r.text)
+            for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
+                listIDStr = str(listID)
+                ET.SubElement(camerasObjects, 'Obj', {
+                        'myID':str(objectsIndexed), 
+                        'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
+                        'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
+                        'groupNr':resultSet.find('GroupedNumList-' + listIDStr).text})
+                objectsIndexed += 1
+            print('Got soo many Elements:' + str(objectsIndexed))   
+            
+        #save xml
+        tree = ET.ElementTree(camerasObjects)
+        tree.write('myBigResultSet.xml')
+        
+        #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
+        #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
+        r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(objID1))
+        thumbBytes = extractThumbFromExifHeader(r.content)
