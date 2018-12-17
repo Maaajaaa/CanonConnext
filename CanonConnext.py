@@ -371,7 +371,10 @@ def extractThumbFromExifHeader(exitfbytes):
     only works well in THIS case because they're all the same
     """
     exifbits = bitarray()
-    exifbits.frombyes(exitfbytes)
+    exifbits.frombytes(exitfbytes)
+    refbytes = exifbits.tobytes()
+    #print(refbytes.hex())
+    print(exifbits.tostring())
     
     ffd8 = bitarray()
     ffd8.frombytes(b'\xFF\xD8')
@@ -428,15 +431,15 @@ with open('POSTrequests/statusRunRequest.xml') as requestFile:
         #removing the namespace akes parsing much simpler
         resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
         #print(resultSet.tag)
+        #TODO: could that be topped out?
         totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
-        tree = ET.ElementTree(resultSet)
-        tree.write('myLittleResultSet.xml')
-        
         objID1 = resultSet.find('ObjIDList-1')
+        
+        #create matrix to store IDs, types and group numbers
+        cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
+        
         #get IDs, types and groups
         objectsIndexed = 0
-        #make an XML to save the properties
-        camerasObjects = ET.Element('camerasObects')
         while objectsIndexed < totalNumOfItemsOnCamera:
             #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
             #meaning of GroupType is unlear to me
@@ -445,19 +448,16 @@ with open('POSTrequests/statusRunRequest.xml') as requestFile:
             #print("got:" + r.text)
             for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
                 listIDStr = str(listID)
-                ET.SubElement(camerasObjects, 'Obj', {
-                        'myID':str(objectsIndexed), 
-                        'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
-                        'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
-                        'groupNr':resultSet.find('GroupedNumList-' + listIDStr).text})
+                cameraObjects[objectsIndexed]={'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
+                  'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
+                  'groupNbr':resultSet.find('GroupedNumList-' + listIDStr).text}
                 objectsIndexed += 1
-            print('Got soo many Elements:' + str(objectsIndexed))   
+            print('Got soo many Elements:' + str(objectsIndexed))
             
-        #save xml
-        tree = ET.ElementTree(camerasObjects)
-        tree.write('myBigResultSet.xml')
         
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
-        r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(objID1))
-        thumbBytes = extractThumbFromExifHeader(r.content)
+        r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(objID1))
+        print(r2.status_code)
+        print(r2.text)
+        thumbBytes = extractThumbFromExifHeader(r2.content)

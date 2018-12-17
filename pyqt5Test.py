@@ -38,6 +38,7 @@ class SomeObject(QObject):
 
     finished = pyqtSignal()
     addPic = pyqtSignal(str)
+    
 
     def long_running(self):
         count = 0
@@ -47,14 +48,7 @@ class SomeObject(QObject):
             count += 1
             self.addPic.emit('name')
         self.finished.emit()
-        
 
-def except_hook(cls, exception, traceback):
-    sys.__excepthook__(cls, exception, traceback)
-
-if __name__ == "__main__":
-
-    sys.excepthook = except_hook
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
