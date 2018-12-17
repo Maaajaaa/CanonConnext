@@ -17,6 +17,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 import os
 import threading
 from bitarray import bitarray
+from time import time
 
 # ---- GLOBAL VARIABLES -------
 
@@ -140,10 +141,12 @@ def imink_response_sever():
     server.serve_forever()
 
 # HTTPRequestHandler class
-class SSDP_RequestHandler(SimpleHTTPRequestHandler):  
+class SSDP_RequestHandler(SimpleHTTPRequestHandler):
+    #CameraConnectedMobile Request tracker, if camera requests it, SSDP-Server can be stopped (definitely required when connected)
     gotAskedForCCM = False
     def do_GET(self):
-        """Serve a GET request and send a GET request RIGHT after we get asked for CameraConnectedMobile.xml the first time to skip long waits"""
+        """Serve a GET request and send a GET request RIGHT after request for 
+           CameraConnectedMobile.xml the first time to skip long waits"""
         f = self.send_head()
         if f:
             try:
@@ -372,13 +375,14 @@ def removeXMLNamespace(xmlstring):
 def extractThumbFromExifHeader(exitfbytes):
     """
     Extract JPEG thumbnail from Exif header, this method is pretty hacky and 
-    only works well in THIS case because they're all the same
+    only works well in THIS case because they're all the same, the standard is 
+    much broader
     """
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
     
     ffd8 = bitarray()
-    #FFE1 494is the thumb
+    #FFDB was found as a common thing in all thumbs
     ffd8.frombytes(b'\xFF\xD8\xFF\xDB')
     
     ffd9 = bitarray()
@@ -387,16 +391,8 @@ def extractThumbFromExifHeader(exitfbytes):
     ffd8s = exifbits.search(ffd8) 
     ffd9s = exifbits.search(ffd9)
     
-    print(ffd8s)
-    
-    print(ffd9s)
     #cut from the occurence of ffd8ffe1 to ffd9 but include ffd9 which is 16 BITS long
-    
-    for i in range(0, len(ffd8s)):                      # 12kB = 96kbit
-        print(i)
-        print(ffd9s[len(ffd9s)-1]+16)
-        print('-')
-        print(ffd8s[i])
+    for i in range(0, len(ffd8s)):
         if ffd9s[len(ffd9s)-1]+16 - ffd8s[i] > 0:
             exifbits = exifbits[ffd8s[i]:ffd9s[len(ffd9s)-1]+16]
     
@@ -411,7 +407,6 @@ def getThumb(number):
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
-        print(len(r2.content))
         return extractThumbFromExifHeader(r2.content)
 
 # start server treads
@@ -436,21 +431,19 @@ while not connectedToCamera:
 with open('POSTrequests/statusRunRequest.xml') as requestFile:                          
     s = Session()
     req = Request('POST', 'http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
-    prepped = req.prepare()    
-    prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
-    resp = s.send(prepped)
-    print(resp.status_code, resp.content)
+prepped = req.prepare()    
+prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
+resp = s.send(prepped)
+if debug: print(resp.status_code, resp.content)
     
 req = Request('GET', 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
 prepped = req.prepare()    
 prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
 resp = s.send(prepped)
-print(resp.status_code, resp.content)
+if debug: print(resp.status_code, resp.content)
 if resp.status_code is 200:
-    #removing the namespace akes parsing much simpler
+    #removing the namespaces makes parsing much simpler
     resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
-    #print(resultSet.tag)
-    #TODO: could that be topped out?
     totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
     
     #create matrix to store IDs, types and group numbers
@@ -470,14 +463,7 @@ if resp.status_code is 200:
               'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
               'groupNbr':resultSet.find('GroupedNumList-' + listIDStr).text}
             objectsIndexed += 1
-        print('Got soo many Elements:' + str(objectsIndexed))
-        
-    
-    #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
-    #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
-    r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[totalNumOfItemsOnCamera-1]['objID']))
-    print(len(r2.content))
-    extractThumbFromExifHeader(r2.content)
+        if debug:  print('Got soo many Elements:' + str(objectsIndexed))
     
     #start GUI to display thumbs
     
@@ -485,7 +471,6 @@ if resp.status_code is 200:
     from PyQt5.QtGui import QIcon, QPixmap
     from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem
     from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
-    #import PyQt5 as Qt
     import sys
     
     class HelloWindow(QMainWindow):
@@ -512,23 +497,21 @@ if resp.status_code is 200:
         finished = pyqtSignal()
         addPic = pyqtSignal(QPixmap, str)
     
-        def long_running(self):
-            count = 0
+        def runner(self):
             for i in range(totalNumOfItemsOnCamera):
                 qp = QPixmap()
                 qp.loadFromData(getThumb(i))
-                self.addPic.emit(qp, 'name')
-            #self.finished.emit()
+                self.addPic.emit(qp, str(i))
+            self.finished.emit()
 
     app = QtWidgets.QApplication(sys.argv)
     mainWin = HelloWindow()
     mainWin.show()
     objThread = QThread()
-    obj = SomeObject()
+    obj= SomeObject()
     obj.moveToThread(objThread)
     obj.finished.connect(objThread.quit)
-    objThread.started.connect(obj.long_running)
-    #objThread.finished.connect(app.exit)
+    objThread.started.connect(obj.runner)
     obj.addPic.connect(mainWin.addPic)
     objThread.start()
         
