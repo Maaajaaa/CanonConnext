@@ -23,15 +23,37 @@ from time import time
 
 runSSDPOnAndOn = True
 connectedToCamera = False
-debug = False
+debug = True
 
 cameraIP = '192.168.0.106'
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
+ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
+print(ip)
+host_port = '49152'
+
+# DEVICE SETTINGS
+
+#TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
+uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
+
+#os and name should not contain /
+system = 'Debian 9'
+friendly_name = 'Cannon Connext'
+
+# ------------SSDP NOTIFY Messages--------------------
+notifyBase = ''
+notifyExtension = ['' for x in range(4)]
+
+
+gotData = 0
+data = ''
+
+
 # HTTPRequestHandler class
 class iminkRequestHandler(SimpleHTTPRequestHandler):  
-    gotAskedForCCM = False
+    CCMRequested = False
     server_version = 'OS/Version UPnP/1.0'
     sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
 
@@ -128,8 +150,8 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             try:
                 self.copyfile(f, self.wfile)
                 fname = os.path.basename(f.name)
-                if self.gotAskedForCCM is False and 'CameraConnectedMobile.xml' in fname:
-                    self.gotAskedForCCM = True
+                if self.CCMRequested is False and 'CameraConnectedMobile.xml' in fname:
+                    self.CCMRequested = True
             finally:
                 f.close()
                 
@@ -140,10 +162,12 @@ def imink_response_sever():
     server = HTTPServer(server_address, iminkRequestHandler)
     server.serve_forever()
 
-# HTTPRequestHandler class
+
 class SSDP_RequestHandler(SimpleHTTPRequestHandler):
-    #CameraConnectedMobile Request tracker, if camera requests it, SSDP-Server can be stopped (definitely required when connected)
-    gotAskedForCCM = False
+    
+    
+    #CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped (definitely required when connected)
+    CCMRequested = False
     def do_GET(self):
         """Serve a GET request and send a GET request RIGHT after request for 
            CameraConnectedMobile.xml the first time to skip long waits"""
@@ -152,8 +176,8 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
             try:
                 self.copyfile(f, self.wfile)
                 fname = os.path.basename(f.name)
-                if self.gotAskedForCCM is False and 'CameraConnectedMobile.xml' in fname:
-                    self.gotAskedForCCM = True
+                if self.CCMRequested is False and 'CameraConnectedMobile.xml' in fname:
+                    self.CCMRequested = True
                     global runSSDPOnAndOn
                     runSSDPOnAndOn = False
                     http = urllib3.PoolManager()
@@ -178,23 +202,6 @@ def start_ssdp_response_server():
     server.serve_forever()
     
 
-ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
-print(ip)
-host_port = '49152'
-
-# DEVICE SETTINGS
-
-#TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
-uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
-
-#os and name should not contain /
-system = 'Debian 9'
-friendly_name = 'Cannon Connext'
-
-# ------------SSDP NOTIFY Messages--------------------
-notifyBase = ''
-notifyExtension = ['' for x in range(4)]
-
 # -------------SSDP M-SEARCH Messages----------------
 mSerachMsgCanon = \
     'M-SEARCH * HTTP/1.1\r\n' \
@@ -210,9 +217,6 @@ mSerachMsgEOS = \
     'MX: 3\r\n' \
     'MAN:"ssdp:discover"\r\n' \
     '\r\n'
-
-gotData = 0
-data = ''
 
 def defineNotifications(stage):
     """set notifyBase and notifyExtension to the right stage"""
@@ -409,6 +413,7 @@ def getThumb(number):
         r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
         return extractThumbFromExifHeader(r2.content)
 
+
 # start server treads
 t = threading.Thread(target=start_ssdp_response_server)
 t.start()
@@ -446,24 +451,37 @@ if resp.status_code is 200:
     resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
     totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
     
-    #create matrix to store IDs, types and group numbers
+    """
+    cameraObjects is a list, starting at the oldest object, of dictionaries containing
+    objID: unique identifier of each picture given to it by the camera, required for loading the EXIF header and downloadig the image
+    objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
+    groupNbr: number of pictures in a group of pictures taken in CreativeShot mode, all of them seem to be refferenced by the same ID
+    """
     cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
     
     #get IDs, types and groups
     objectsIndexed = 0
     while objectsIndexed < totalNumOfItemsOnCamera:
         #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
-        #meaning of GroupType is unlear to me
         r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
         resultSet = ET.fromstring(removeXMLNamespace(r.text) )
-        #print("got:" + r.text)
+        print(resultSet)
         for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
             listIDStr = str(listID)
-            cameraObjects[objectsIndexed]={'objID':resultSet.find('ObjIDList-' + listIDStr).text, 
-              'objType':resultSet.find('ObjTypeList-' + listIDStr).text, 
-              'groupNbr':resultSet.find('GroupedNumList-' + listIDStr).text}
+            #find dictionary entries
+            groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
+            objType = resultSet.find('ObjTypeList-' + listIDStr).text
+            objID = resultSet.find('ObjIDList-' + listIDStr).text
+            #add dictionary of current object to the list
+            cameraObjects[objectsIndexed]={'objID':objID, 'objType':objType, 'groupNbr':groupNbr}
+            
             objectsIndexed += 1
-        if debug:  print('Got soo many Elements:' + str(objectsIndexed))
+            #picture groups from creative shots count as one item since they have only one ID afaik
+            if int(groupNbr) is not 0:
+                totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
+            
+        if debug: print('Got soo many Elements:' + str(objectsIndexed))
+    if debug: print(cameraObjects)
     
     #start GUI to display thumbs
     
@@ -498,10 +516,11 @@ if resp.status_code is 200:
         addPic = pyqtSignal(QPixmap, str)
     
         def runner(self):
-            for i in range(totalNumOfItemsOnCamera):
+            for i in range(1,totalNumOfItemsOnCamera):
                 qp = QPixmap()
-                qp.loadFromData(getThumb(i))
-                self.addPic.emit(qp, str(i))
+                #we want to see newest first but numbering starts at oldest
+                qp.loadFromData(getThumb(totalNumOfItemsOnCamera-i))
+                self.addPic.emit(qp, str(totalNumOfItemsOnCamera-i))
             self.finished.emit()
 
     app = QtWidgets.QApplication(sys.argv)
