@@ -7,7 +7,6 @@ Created on Tue Dec  4 17:10:05 2018
 
 import socket
 import netifaces as ni
-import urllib3
 from io import BytesIO
 from requests import Request, Session, get
 from time import sleep
@@ -17,13 +16,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 import os
 import threading
 from bitarray import bitarray
-from time import time
 
 # ---- GLOBAL VARIABLES -------
 
 runSSDPOnAndOn = True
 connectedToCamera = False
-debug = True
+debug = False
 
 cameraIP = '192.168.0.106'
 cameraObjects = []
@@ -180,17 +178,10 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                     self.CCMRequested = True
                     global runSSDPOnAndOn
                     runSSDPOnAndOn = False
-                    http = urllib3.PoolManager()
-                    r = http.request('GET', 'http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6', preload_content=False)
-                    while True:
-                        MobileConnectedCamera = r.read()
-                        if not MobileConnectedCamera:
-                            break
-                        if debug:
-                            print("\n\nGot MobileConnectedCamera.xml:\n")
-                            print(MobileConnectedCamera)
-                            print("\n\n")
-                    r.release_conn()
+                    
+                    r = get('http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6')
+                    MobileConnectedCamera = r.text
+                    if debug: print("\n\nGot MobileConnectedCamera.xml:\n", MobileConnectedCamera, "\n\n")
             finally:
                 f.close()
                 
@@ -318,20 +309,11 @@ def getCameraDevDesc():
     #request and read the CameraDevDesc.xml
     
     global gotData, data
-    http = urllib3.PoolManager()
     if gotData:
         url = re.search("(?P<url>https?://[^\s]+)", data.decode("utf-8")).group("url")
-        r = http.request('GET', url, preload_content=False)
-        
-        while True:
-            CameraDevDesc = r.read()
-            if not CameraDevDesc:
-                break
-            if debug:
-                print("\n\nGot CameraDevDesc.xml:\n")
-                print(CameraDevDesc)
-                print("\n\n")
-        r.release_conn()
+        r = get(url)
+        CameraDevDesc = r.text
+        if debug: print("\n\nGot CameraDevDesc.xml:\n", CameraDevDesc, "\n\n")
         
 def makeMobileDevDesc():
     #make MobileDevDesc.xml, modifying get's messy because of the partial namespace  
@@ -441,10 +423,8 @@ prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
 resp = s.send(prepped)
 if debug: print(resp.status_code, resp.content)
     
-req = Request('GET', 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
-prepped = req.prepare()    
-prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'
-resp = s.send(prepped)
+resp = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+
 if debug: print(resp.status_code, resp.content)
 if resp.status_code is 200:
     #removing the namespaces makes parsing much simpler
