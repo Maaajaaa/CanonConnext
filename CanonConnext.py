@@ -508,7 +508,7 @@ if resp.status_code is 200:
     #start GUI to display thumbs
     
     from PyQt5 import QtWidgets
-    from PyQt5.QtGui import QIcon, QPixmap
+    from PyQt5.QtGui import QIcon, QPixmap, QTransform
     from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem
     from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
     import sys
@@ -523,7 +523,7 @@ if resp.status_code is 200:
             self.setCentralWidget(self.listWidget)
             
         def addPic(self,pixmap,name):
-            self.listWidget.addItem(QListWidgetItem(QIcon(pixmap),name))
+            self.listWidget.addItem(QListWidgetItem(QIcon(pixmap),name))            
             
     class GalleryWidget(QListWidget):
         def __init__(self, parent=None):
@@ -543,7 +543,15 @@ if resp.status_code is 200:
                 #we want to see newest first but numbering starts at oldest
                 currentID = totalNumOfItemsOnCamera-i
                 qp.loadFromData(getThumb(currentID))
-                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'] + " " + cameraObjects[currentID]['Orientation'])
+                
+                #rotate pixmap
+                if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CW':
+                    qp = qp.transformed(QTransform().rotate(90))
+                    
+                if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CCW':
+                    qp = qp.transformed(QTransform().rotate(270))
+                    
+                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'])
             self.finished.emit()
 
     app = QtWidgets.QApplication(sys.argv)
