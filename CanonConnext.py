@@ -7,7 +7,7 @@ Created on Tue Dec  4 17:10:05 2018
 
 import socket
 import netifaces as ni
-from io import BytesIO
+from io import BytesIO, BufferedRandom
 from requests import Request, Session, get
 from time import sleep
 import re
@@ -16,6 +16,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler, HTTPStatus
 import os
 import threading
 from bitarray import bitarray
+import exifread
 
 # ---- GLOBAL VARIABLES -------
 
@@ -248,28 +249,25 @@ def defineNotifications(stage):
             'Cache-Control: max-age=1800\r\n' \
             'Location: http://'+ ip + ':' + host_port + '/MobileDevDesc.xml\r\n' \
             'Server: Camera OS/1.0 UPnP/1.0 ' + system + '/' + friendly_name + '/1.0\r\n'\
+            'NTS: ssdp:alive\r\n' \
         
         notifyExtension[0] = \
             'NT: upnp:rootdevice\r\n' \
-            'NTS: ssdp:alive\r\n' \
             'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
             '\r\n'
             
         notifyExtension[1] = \
             'NT: uuid:' + uuid + '\r\n' \
-            'NTS: ssdp:alive\r\n' \
             'USN: uuid:' + uuid + '\r\n' \
             '\r\n'
             
         notifyExtension[2] = \
             'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
-            'NTS: ssdp:alive\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
             '\r\n'
             
         notifyExtension[3] = \
             'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
-            'NTS: ssdp:alive\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
             '\r\n'
         
@@ -364,6 +362,8 @@ def extractThumbFromExifHeader(exitfbytes):
     only works well in THIS case because they're all the same, the standard is 
     much broader
     """
+    
+
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
     
@@ -382,8 +382,9 @@ def extractThumbFromExifHeader(exitfbytes):
         if ffd9s[len(ffd9s)-1]+16 - ffd8s[i] > 0:
             exifbits = exifbits[ffd8s[i]:ffd9s[len(ffd9s)-1]+16]
     
-            with open('pyExtractedThumb.jpg', 'wb') as file:
-                exifbits.tofile(file)
+            if debug: 
+                with open('pyExtractedThumb.jpg', 'wb') as file:
+                    exifbits.tofile(file)
             
             return exifbits.tobytes()
 
@@ -393,8 +394,49 @@ def getThumb(number):
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
+        #process EXIF tags
+        #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
+        bitcent = bitarray()
+        bitcent.frombytes(r2.content)
+        pattern = bitarray()
+        if cameraObjects[number]['objType'] != "CR2":
+            #all other files seem to have a JPEG/exif header, even Videos
+            pattern.frombytes(b'\xFF\xD8')
+            exifstart = bitcent.search(pattern)[0]
+            vincentAdultman = BufferedRandom(BytesIO())
+            vincentAdultman.write(bitcent[exifstart:len(bitcent)-exifstart].tobytes())
+            vincentAdultman.seek(0)
+            
+            if debug: 
+                with open('r2.txt', 'wb') as txt:
+                    txt.write(r2.text.encode())
+            #read EXIF-tags but don't process the thumb (method below is much faster)
+            tags = exifread.process_file(vincentAdultman, details=False)
+            #print(tags)
+            #put relevant tags into cameraObjects
+            cameraObjects[number]['Resolution'] = str(tags['EXIF ExifImageWidth']) + 'x' + str(tags['EXIF ExifImageLength'])
+            if int(str(tags['EXIF ExifImageWidth'])) is not 160:
+                cameraObjects[number]['SizeAbrv'] = getImageSizeAbbrevation(str(tags['Image Model']), str(tags['EXIF ExifImageWidth']))   
+            else:
+                cameraObjects[number]['SizeAbrv'] = '?'
+            cameraObjects[number]['Orientation'] = str(tags['Image Orientation'])
+        else:
+            #it's a RAW file, the header is very different from the JPEG so it's just set to some defaults
+            cameraObjects[number]['Resolution'] = 'RAW'
+            #RAWs (CR2 are a subclass of them) are always unscaled
+            cameraObjects[number]['SizeAbrv'] = 'L'
+            #we don't know but it's not worth the effort
+            cameraObjects[number]['Orientation'] = 'Horizontal'
+        
+        #save some important tags
         return extractThumbFromExifHeader(r2.content)
 
+def getImageSizeAbbrevation(imageModel, imageWidth):
+    CameraModelImageSizeAbbrevations = { 
+    'Canon PowerShot G7 X':{'5472':'L', '4320':'M1', '2304':'M2', '1920':'M2', '720':'S'}
+    }
+    return CameraModelImageSizeAbbrevations[imageModel][imageWidth]
+        
 
 # start server treads
 t = threading.Thread(target=start_ssdp_response_server)
@@ -499,8 +541,9 @@ if resp.status_code is 200:
             for i in range(1,totalNumOfItemsOnCamera):
                 qp = QPixmap()
                 #we want to see newest first but numbering starts at oldest
-                qp.loadFromData(getThumb(totalNumOfItemsOnCamera-i))
-                self.addPic.emit(qp, str(totalNumOfItemsOnCamera-i))
+                currentID = totalNumOfItemsOnCamera-i
+                qp.loadFromData(getThumb(currentID))
+                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'] + " " + cameraObjects[currentID]['Orientation'])
             self.finished.emit()
 
     app = QtWidgets.QApplication(sys.argv)
