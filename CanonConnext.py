@@ -436,82 +436,86 @@ def getImageSizeAbbrevation(imageModel, imageWidth):
     'Canon PowerShot G7 X':{'5472':'L', '4320':'M1', '2304':'M2', '1920':'M2', '720':'S'}
     }
     return CameraModelImageSizeAbbrevations[imageModel][imageWidth]
-        
+
+def postFileGetResponse(url, path):
+    with open(path) as requestFile:      
+        req = Request('POST', url, data=str.encode(requestFile.read()), headers= {'Content-Type':'text/xml ; charset=utf-8'})
+    return Session().send(req.prepare())
 
 # start server treads
-t = threading.Thread(target=start_ssdp_response_server)
-t.start()
 
-t2 = threading.Thread(target=imink_response_sever)
-t2.start()
+GUIdevOnly = False
+if not GUIdevOnly:
+    t = threading.Thread(target=start_ssdp_response_server)
+    t.start()
+    
+    t2 = threading.Thread(target=imink_response_sever)
+    t2.start()
+    while not connectedToCamera:
+        if runSSDPOnAndOn:
+            sendNotify(stage=1)
+            if gotData:
+                getCameraDevDesc()
+                makeMobileDevDesc()
+                sendNotify(stage=2)
+                gotData=False
+        else:
+            sleep(0.01)
 
-while not connectedToCamera:
-    if runSSDPOnAndOn:
-        sendNotify(stage=1)
-        if gotData:
-            getCameraDevDesc()
-            makeMobileDevDesc()
-            sendNotify(stage=2)
-            gotData=False
-    else:
-        sleep(0.01)
+if not GUIdevOnly:
+    #We're in like Flinn
+    resp = postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+    if debug: print(resp.status_code, resp.content)
         
-#We're in like Flinn
-with open('POSTrequests/statusRunRequest.xml') as requestFile:                          
-    s = Session()
-    req = Request('POST', 'http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', data=str.encode(requestFile.read()))
-prepped = req.prepare()    
-prepped.headers['Content-Type'] = 'text/xml ; charset=utf-8'        
-resp = s.send(prepped)
-if debug: print(resp.status_code, resp.content)
+    resp = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
     
-resp = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
-
-if debug: print(resp.status_code, resp.content)
-if resp.status_code is 200:
-    #removing the namespaces makes parsing much simpler
-    resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
-    totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
-    
-    """
-    cameraObjects is a list, starting at the oldest object, of dictionaries containing
-    objID: unique identifier of each picture given to it by the camera, required for loading the EXIF header and downloadig the image
-    objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
-    groupNbr: number of pictures in a group of pictures taken in CreativeShot mode, all of them seem to be refferenced by the same ID
-    """
-    cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
-    
-    #get IDs, types and groups
-    objectsIndexed = 0
-    while objectsIndexed < totalNumOfItemsOnCamera:
-        #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
-        r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
-        resultSet = ET.fromstring(removeXMLNamespace(r.text) )
-        print(resultSet)
-        for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
-            listIDStr = str(listID)
-            #find dictionary entries
-            groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
-            objType = resultSet.find('ObjTypeList-' + listIDStr).text
-            objID = resultSet.find('ObjIDList-' + listIDStr).text
-            #add dictionary of current object to the list
-            cameraObjects[objectsIndexed]={'objID':objID, 'objType':objType, 'groupNbr':groupNbr}
-            
-            objectsIndexed += 1
-            #picture groups from creative shots count as one item since they have only one ID afaik
-            if int(groupNbr) is not 0:
-                totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
-            
-        if debug: print('Got soo many Elements:' + str(objectsIndexed))
-    if debug: print(cameraObjects)
+    if debug: print(resp.status_code, resp.content)
+if GUIdevOnly or resp.status_code is 200:
+    if not GUIdevOnly:
+        #removing the namespaces makes parsing much simpler
+        resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
+        totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
+        
+        """
+        cameraObjects is a list, starting at the oldest object, of dictionaries containing
+        objID: unique identifier of each picture given to it by the camera, required for loading the EXIF header and downloadig the image
+        objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
+        groupNbr: number of pictures in a group of pictures taken in CreativeShot mode, all of them seem to be refferenced by the same ID
+        """
+        cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
+        
+        #get IDs, types and groups
+        objectsIndexed = 0
+        while objectsIndexed < totalNumOfItemsOnCamera:
+            #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
+            r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
+            resultSet = ET.fromstring(removeXMLNamespace(r.text) )
+            print(resultSet)
+            for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
+                listIDStr = str(listID)
+                #find dictionary entries
+                groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
+                objType = resultSet.find('ObjTypeList-' + listIDStr).text
+                objID = resultSet.find('ObjIDList-' + listIDStr).text
+                #add dictionary of current object to the listd
+                cameraObjects[objectsIndexed]={'objID':objID, 'objType':objType, 'groupNbr':groupNbr}
+                
+                objectsIndexed += 1
+                #picture groups from creative shots count as one item since they have only one ID afaik
+                if int(groupNbr) is not 0:
+                    totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
+                
+            if debug: print('Got soo many Elements:' + str(objectsIndexed))
+        if debug: print(cameraObjects)
     
     #start GUI to display thumbs
     
     from PyQt5 import QtWidgets
     from PyQt5.QtGui import QIcon, QPixmap, QTransform
-    from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem
+    from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QAction
     from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
-    import sys
+    import sys    
+    import qdarkstyle
     
     class HelloWindow(QMainWindow):
         def __init__(self):
@@ -522,8 +526,44 @@ if resp.status_code is 200:
             self.listWidget = GalleryWidget()
             self.setCentralWidget(self.listWidget)
             
-        def addPic(self,pixmap,name):
-            self.listWidget.addItem(QListWidgetItem(QIcon(pixmap),name))            
+            exitAct = QAction(QIcon.fromTheme('application-exit'), 'Exit', self)
+            exitAct.setShortcut('Ctrl+Q')
+            exitAct.setStatusTip('Quit')
+            exitAct.triggered.connect(self.disconnectAndClose)
+            
+            dowloadAct = QAction(QIcon.fromTheme('emblem-downloads'), 'Download selected images', self)
+            dowloadAct.setShortcut('Ctrl+D')
+            dowloadAct.setStatusTip('Download selected images')
+            dowloadAct.triggered.connect(self.downloadSelected)
+    
+            self.statusBar()
+    
+            toolbar = self.addToolBar('Exit')
+            toolbar.addAction(exitAct)
+            toolbar.addAction(dowloadAct)
+            
+            self.obj= SomeObject()
+            
+        def addPic(self,pixmap,name, number):
+            gi = GalleryItem(QIcon(pixmap),name)
+            gi.setObjectNumber(number)
+            self.listWidget.addItem(gi)
+            
+        def downloadSelected(self):
+            for item in self.listWidget.selectedItems():
+                print(item.getObjectNumber())
+                
+        def disconnectAndClose(self):
+            #tell Camera to turn off and close app
+            #TODO: get this to work
+            self.obj.finished()
+            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
+            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/DisconnectStatus', 'POSTrequests/powerOff.xml')
+            #SSDP byebye
+            sendNotify(stage=1)
+            print(resp.status_code)
+            self.close()
             
     class GalleryWidget(QListWidget):
         def __init__(self, parent=None):
@@ -531,11 +571,20 @@ if resp.status_code is 200:
             self.setViewMode(QListWidget.IconMode)
             self.setIconSize(QSize(200,200))
             self.setResizeMode(QListWidget.Adjust)
+            self.setDragEnabled(False)
+            self.setSelectionMode(QAbstractItemView.ExtendedSelection)        
             
+    class GalleryItem(QListWidgetItem):
+        def setObjectNumber(self, number):
+            self.objectNumber = number
+            
+        def getObjectNumber(self):
+            return self.objectNumber
+                
     class SomeObject(QObject):
     
         finished = pyqtSignal()
-        addPic = pyqtSignal(QPixmap, str)
+        addPic = pyqtSignal(QPixmap, str, int)
     
         def runner(self):
             for i in range(1,totalNumOfItemsOnCamera):
@@ -551,18 +600,19 @@ if resp.status_code is 200:
                 if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CCW':
                     qp = qp.transformed(QTransform().rotate(270))
                     
-                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'])
+                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
             self.finished.emit()
-
+    
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     mainWin = HelloWindow()
     mainWin.show()
-    objThread = QThread()
-    obj= SomeObject()
-    obj.moveToThread(objThread)
-    obj.finished.connect(objThread.quit)
-    objThread.started.connect(obj.runner)
-    obj.addPic.connect(mainWin.addPic)
-    objThread.start()
-        
+    if not GUIdevOnly:
+        objThread = QThread()
+        obj = mainWin.obj
+        obj.moveToThread(objThread)
+        obj.finished.connect(objThread.quit)
+        objThread.started.connect(obj.runner)
+        obj.addPic.connect(mainWin.addPic)
+        objThread.start()
     sys.exit( app.exec_() )
