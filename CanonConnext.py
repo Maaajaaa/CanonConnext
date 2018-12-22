@@ -24,7 +24,8 @@ runSSDPOnAndOn = True
 connectedToCamera = False
 debug = False
 
-cameraIP = '192.168.0.106'
+#TODO: get this address automatically
+cameraIP = '192.168.0.104'
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
@@ -49,6 +50,12 @@ notifyExtension = ['' for x in range(4)]
 gotData = 0
 data = ''
 
+#constants to make life easy
+
+ffd8 = bitarray()
+ffd8.frombytes(b'\xFF\xD8')
+ffd9 = bitarray()
+ffd9.frombytes(b'\xFF\xD9')
 
 # HTTPRequestHandler class
 class iminkRequestHandler(SimpleHTTPRequestHandler):  
@@ -367,14 +374,11 @@ def extractThumbFromExifHeader(exitfbytes):
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
     
-    ffd8 = bitarray()
+    ffd8db = bitarray()
     #FFDB was found as a common thing in all thumbs
-    ffd8.frombytes(b'\xFF\xD8\xFF\xDB')
+    ffd8db.frombytes(b'\xFF\xD8\xFF\xDB')
     
-    ffd9 = bitarray()
-    ffd9.frombytes(b'\xFF\xD9')
-    
-    ffd8s = exifbits.search(ffd8) 
+    ffd8s = exifbits.search(ffd8db) 
     ffd9s = exifbits.search(ffd9)
     
     #cut from the occurence of ffd8ffe1 to ffd9 but include ffd9 which is 16 BITS long
@@ -398,11 +402,9 @@ def getThumb(number):
         #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
         bitcent = bitarray()
         bitcent.frombytes(r2.content)
-        pattern = bitarray()
         if cameraObjects[number]['objType'] != "CR2":
             #all other files seem to have a JPEG/exif header, even Videos
-            pattern.frombytes(b'\xFF\xD8')
-            exifstart = bitcent.search(pattern)[0]
+            exifstart = bitcent.search(ffd8)[0]
             vincentAdultman = BufferedRandom(BytesIO())
             vincentAdultman.write(bitcent[exifstart:len(bitcent)-exifstart].tobytes())
             vincentAdultman.seek(0)
@@ -473,7 +475,7 @@ if not GUIdevOnly:
 if GUIdevOnly or resp.status_code is 200:
     if not GUIdevOnly:
         #removing the namespaces makes parsing much simpler
-        resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")) )
+        resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")))
         totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
         
         """
@@ -490,7 +492,7 @@ if GUIdevOnly or resp.status_code is 200:
             #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
             r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
             resultSet = ET.fromstring(removeXMLNamespace(r.text) )
-            print(resultSet)
+            if debug: print(resultSet)
             for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
                 listIDStr = str(listID)
                 #find dictionary entries
@@ -543,6 +545,7 @@ if GUIdevOnly or resp.status_code is 200:
             toolbar.addAction(dowloadAct)
             
             self.obj= SomeObject()
+            self.objThread = QThread()
             
         def addPic(self,pixmap,name, number):
             gi = GalleryItem(QIcon(pixmap),name)
@@ -551,12 +554,34 @@ if GUIdevOnly or resp.status_code is 200:
             
         def downloadSelected(self):
             for item in self.listWidget.selectedItems():
+                #stop loading thumbs                
+                self.stopThumbLoading()
                 print(item.getObjectNumber())
-                
+                currentNumber = item.getObjectNumber()
+                #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
+                #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
+                r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjProperty?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + cameraObjects[currentNumber]['objType'])
+                #TODO: do excetion stuff here
+                if r.status_code == 200:
+                    dataSize = ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text
+                    print(dataSize)
+                    #get the image, unresized:
+                    #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
+                    r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + cameraObjects[currentNumber]['objType'] + '&ResizeDataSize=' + dataSize)
+                    self.saveImageFromResponse(r.content)
+                    
+        def saveImageFromResponse(self, responseContent):
+            bits = bitarray()
+            bits.frombytes(responseContent)
+            ffd8s = bits.search(ffd8) 
+            ffd9s = bits.search(ffd9)
+            bits = bits[ffd8s[0]:ffd9s[len(ffd9s)-1]+16]
+            with open('dl.jpg', 'wb') as file:
+                bits.tofile(file)
+            
         def disconnectAndClose(self):
             #tell Camera to turn off and close app
             #TODO: get this to work
-            self.obj.finished()
             postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
             postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/DisconnectStatus', 'POSTrequests/powerOff.xml')
@@ -564,6 +589,11 @@ if GUIdevOnly or resp.status_code is 200:
             sendNotify(stage=1)
             print(resp.status_code)
             self.close()
+            
+        def stopThumbLoading(self):
+            self.obj.stop()
+            self.objThread.quit()
+            self.objThread.wait()
             
     class GalleryWidget(QListWidget):
         def __init__(self, parent=None):
@@ -585,6 +615,7 @@ if GUIdevOnly or resp.status_code is 200:
     
         finished = pyqtSignal()
         addPic = pyqtSignal(QPixmap, str, int)
+        stopNow = False
     
         def runner(self):
             for i in range(1,totalNumOfItemsOnCamera):
@@ -601,14 +632,19 @@ if GUIdevOnly or resp.status_code is 200:
                     qp = qp.transformed(QTransform().rotate(270))
                     
                 self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
+                if self.stopNow:
+                    break
             self.finished.emit()
+            
+        def stop(self):
+            self.stopNow = True
     
     app = QtWidgets.QApplication(sys.argv)
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     mainWin = HelloWindow()
     mainWin.show()
     if not GUIdevOnly:
-        objThread = QThread()
+        objThread = mainWin.objThread
         obj = mainWin.obj
         obj.moveToThread(objThread)
         obj.finished.connect(objThread.quit)
