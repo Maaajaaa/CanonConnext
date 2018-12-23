@@ -24,8 +24,7 @@ runSSDPOnAndOn = True
 connectedToCamera = False
 debug = False
 
-#TODO: get this address automatically
-cameraIP = '192.168.0.104'
+cameraIP = ''
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
@@ -176,6 +175,8 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
         """Serve a GET request and send a GET request RIGHT after request for 
            CameraConnectedMobile.xml the first time to skip long waits"""
         f = self.send_head()
+        global cameraIP
+        cameraIP, port = self.client_address
         if f:
             try:
                 self.copyfile(f, self.wfile)
@@ -395,7 +396,7 @@ def getThumb(number):
     if number < totalNumOfItemsOnCamera:        
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
-        r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
+        r2 = get(baseURL + 'ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
         
         #-----------------------process EXIF tags-------------------------------------------------------
         
@@ -465,11 +466,13 @@ if not GUIdevOnly:
             sleep(0.01)
 
 if not GUIdevOnly:
+    
     #We're in like Flinn
-    resp = postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+    baseURL = 'http://' + cameraIP + ':8615/MobileConnectedCamera/'
+    resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
     if debug: print(resp.status_code, resp.content)
         
-    resp = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
+    resp = get(baseURL + 'ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
     
     if debug: print(resp.status_code, resp.content)
 if GUIdevOnly or resp.status_code is 200:
@@ -490,10 +493,10 @@ if GUIdevOnly or resp.status_code is 200:
         objectsIndexed = 0
         while objectsIndexed < totalNumOfItemsOnCamera:
             #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
-            r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
+            r = get(baseURL + 'GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
             resultSet = ET.fromstring(removeXMLNamespace(r.text) )
             if debug: print(resultSet)
-            for listID in range(1,int(resultSet.find('ListCount').text) + 1):       
+            for listID in range(1,int(resultSet.find('ListCount').text) + 1): 
                 listIDStr = str(listID)
                 #find dictionary entries
                 groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
@@ -561,7 +564,7 @@ if GUIdevOnly or resp.status_code is 200:
                 currentID = cameraObjects[currentNumber]['objID']
                 #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
                 #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
-                r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjProperty?ObjID=' + 
+                r = get(baseURL + 'ObjProperty?ObjID=' + 
                                     currentID + '&ObjType=JPG')
                 #TODO: do exception stuff here
                 if r.status_code == 200:
@@ -571,7 +574,7 @@ if GUIdevOnly or resp.status_code is 200:
                     while len(receivedBytes) < dataSize:
                         #get the image, unresized:
                         #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
-                        url = 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
+                        url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
                         if len(receivedBytes) != 0:
                             url += '&Offset=' + str(len(receivedBytes))
                         r = get(url)    
@@ -591,7 +594,7 @@ if GUIdevOnly or resp.status_code is 200:
         def disconnectAndClose(self):
             #tell Camera to turn off and close app
             self.stopThumbLoading()
-            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
+            postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             self.obj.shutDownCamera()
             #self.close()
             
@@ -646,8 +649,8 @@ if GUIdevOnly or resp.status_code is 200:
             
         def shutDownCamera(self):
             sleep(2)
-            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
-            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/DisconnectStatus', 'POSTrequests/powerOff.xml')
+            postFileGetResponse(baseURL + 'UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+            postFileGetResponse(baseURL + 'DisconnectStatus', 'POSTrequests/powerOff.xml')
             #SSDP byebye
             sendNotify(stage='byebye')
             t.quit()
