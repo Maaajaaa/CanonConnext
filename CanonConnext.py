@@ -150,7 +150,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(response.getvalue())
         
     def do_GET(self):
-        """Serve a GET request and send a request RIGHT after we get asked for CameraConnectedMobile.xml the first time"""
+        """Serve a GET request and send a request RIGHT after CameraConnectedMobile.xml is requestested for the first time"""
         f = self.send_head()
         if f:
             try:
@@ -170,9 +170,7 @@ def imink_response_sever():
 
 
 class SSDP_RequestHandler(SimpleHTTPRequestHandler):
-    
-    
-    #CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped (definitely required when connected)
+    #CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped
     CCMRequested = False
     def do_GET(self):
         """Serve a GET request and send a GET request RIGHT after request for 
@@ -222,33 +220,7 @@ def defineNotifications(stage):
     
     global notifyBase, notifyExtension
     
-    if stage is 1:
-        notifyBase = \
-        'NOTIFY * HTTP/1.1\r\n' \
-        'Host: 239.255.255.250:1900\r\n' \
-        'NTS: ssdp:byebye\r\n' 
-        
-        notifyExtension[0] = \
-            'NT: upnp:rootdevice\r\n' \
-            'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
-            '\r\n'
-        
-        notifyExtension[1] = \
-            'NT: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5\r\n' \
-            'USN: uuid:' + uuid + '\r\n' \
-            '\r\n'
-            
-        notifyExtension[2] = \
-            'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
-            'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
-            '\r\n'
-            
-        notifyExtension[3] = \
-            'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
-            'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
-            '\r\n'
-            
-    if stage is 2:
+    if stage == 'alive':
         #proper introduction
         notifyBase =  \
             'NOTIFY * HTTP/1.1\r\n' \
@@ -265,6 +237,32 @@ def defineNotifications(stage):
             
         notifyExtension[1] = \
             'NT: uuid:' + uuid + '\r\n' \
+            'USN: uuid:' + uuid + '\r\n' \
+            '\r\n'
+            
+        notifyExtension[2] = \
+            'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
+            'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
+            '\r\n'
+            
+        notifyExtension[3] = \
+            'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
+            'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
+            '\r\n'
+            
+    if stage == 'byebye':
+        notifyBase = \
+        'NOTIFY * HTTP/1.1\r\n' \
+        'Host: 239.255.255.250:1900\r\n' \
+        'NTS: ssdp:byebye\r\n' 
+        
+        notifyExtension[0] = \
+            'NT: upnp:rootdevice\r\n' \
+            'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
+            '\r\n'
+        
+        notifyExtension[1] = \
+            'NT: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5\r\n' \
             'USN: uuid:' + uuid + '\r\n' \
             '\r\n'
             
@@ -398,7 +396,9 @@ def getThumb(number):
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
-        #process EXIF tags
+        
+        #-----------------------process EXIF tags-------------------------------------------------------
+        
         #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
         bitcent = bitarray()
         bitcent.frombytes(r2.content)
@@ -421,7 +421,9 @@ def getThumb(number):
                 cameraObjects[number]['SizeAbrv'] = getImageSizeAbbrevation(str(tags['Image Model']), str(tags['EXIF ExifImageWidth']))   
             else:
                 cameraObjects[number]['SizeAbrv'] = '?'
-            cameraObjects[number]['Orientation'] = str(tags['Image Orientation'])
+            cameraObjects[number]['Orientation'] = str(tags['Image Orientation'])            
+            dt = str(tags['EXIF DateTimeDigitized'])
+            cameraObjects[number]['Date'] = dt.translate({ord(c): None for c in ': '})
         else:
             #it's a RAW file, the header is very different from the JPEG so it's just set to some defaults
             cameraObjects[number]['Resolution'] = 'RAW'
@@ -455,12 +457,10 @@ if not GUIdevOnly:
     t2.start()
     while not connectedToCamera:
         if runSSDPOnAndOn:
-            sendNotify(stage=1)
-            if gotData:
-                getCameraDevDesc()
-                makeMobileDevDesc()
-                sendNotify(stage=2)
-                gotData=False
+            getCameraDevDesc()
+            makeMobileDevDesc()
+            sendNotify(stage='alive')
+            gotData=False
         else:
             sleep(0.01)
 
@@ -516,6 +516,7 @@ if GUIdevOnly or resp.status_code is 200:
     from PyQt5.QtGui import QIcon, QPixmap, QTransform
     from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QAction
     from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
+    from requests_toolbelt.multipart import decoder
     import sys    
     import qdarkstyle
     
@@ -556,39 +557,43 @@ if GUIdevOnly or resp.status_code is 200:
             for item in self.listWidget.selectedItems():
                 #stop loading thumbs                
                 self.stopThumbLoading()
-                print(item.getObjectNumber())
                 currentNumber = item.getObjectNumber()
+                currentID = cameraObjects[currentNumber]['objID']
                 #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
                 #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
-                r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjProperty?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + cameraObjects[currentNumber]['objType'])
-                #TODO: do excetion stuff here
+                r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjProperty?ObjID=' + 
+                                    currentID + '&ObjType=JPG')
+                #TODO: do exception stuff here
                 if r.status_code == 200:
-                    dataSize = ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text
-                    print(dataSize)
-                    #get the image, unresized:
-                    #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
-                    r = get('http://' + cameraIP + ':8615/MobileConnectedCamera/ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + cameraObjects[currentNumber]['objType'] + '&ResizeDataSize=' + dataSize)
-                    self.saveImageFromResponse(r.content)
-                    
-        def saveImageFromResponse(self, responseContent):
-            bits = bitarray()
-            bits.frombytes(responseContent)
-            ffd8s = bits.search(ffd8) 
-            ffd9s = bits.search(ffd9)
-            bits = bits[ffd8s[0]:ffd9s[len(ffd9s)-1]+16]
-            with open('dl.jpg', 'wb') as file:
-                bits.tofile(file)
+                    dataSize = int(ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text)
+                    print('datasize: ', dataSize)
+                    receivedBytes = b''
+                    while len(receivedBytes) < dataSize:
+                        #get the image, unresized:
+                        #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
+                        url = 'http://' + cameraIP + ':8615/MobileConnectedCamera/ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
+                        if len(receivedBytes) != 0:
+                            url += '&Offset=' + str(len(receivedBytes))
+                        r = get(url)    
+                        multipart_data = decoder.MultipartDecoder.from_response(r)
+                        for part in multipart_data.parts:
+                            if b'application/octet-stream' in part.headers[b'Content-Type']:
+                                 #only JPEG necessary so far since CR2 and videos aren't supported yet
+                                 #TODO: fix extension for non-JPEGs (once supported)
+                                 receivedBytes += part.content                                 
+                                 print('already received: ', len(receivedBytes))
+                                 if len(receivedBytes) == dataSize:
+                                     with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.JPG', 'wb') as file:
+                                        file.write(receivedBytes)
+                else:
+                    print('request failed')
             
         def disconnectAndClose(self):
             #tell Camera to turn off and close app
-            #TODO: get this to work
+            self.stopThumbLoading()
             postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
-            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
-            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/DisconnectStatus', 'POSTrequests/powerOff.xml')
-            #SSDP byebye
-            sendNotify(stage=1)
-            print(resp.status_code)
-            self.close()
+            self.obj.shutDownCamera()
+            #self.close()
             
         def stopThumbLoading(self):
             self.obj.stop()
@@ -631,13 +636,23 @@ if GUIdevOnly or resp.status_code is 200:
                 if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CCW':
                     qp = qp.transformed(QTransform().rotate(270))
                     
-                self.addPic.emit(qp, str(currentID) + " " + cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
+                self.addPic.emit(qp, cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
                 if self.stopNow:
                     break
-            self.finished.emit()
+            #self.finished.emit()
             
         def stop(self):
             self.stopNow = True
+            
+        def shutDownCamera(self):
+            sleep(2)
+            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+            postFileGetResponse('http://' + cameraIP + ':8615/MobileConnectedCamera/DisconnectStatus', 'POSTrequests/powerOff.xml')
+            #SSDP byebye
+            sendNotify(stage='byebye')
+            t.quit()
+            t2.quit()
+            self.finished.emit()
     
     app = QtWidgets.QApplication(sys.argv)
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
@@ -650,5 +665,6 @@ if GUIdevOnly or resp.status_code is 200:
         obj.finished.connect(objThread.quit)
         objThread.started.connect(obj.runner)
         obj.addPic.connect(mainWin.addPic)
+        obj.finished.connect(mainWin.close)
         objThread.start()
     sys.exit( app.exec_() )
