@@ -526,7 +526,7 @@ if GUIdevOnly or resp.status_code is 200:
     class HelloWindow(QMainWindow):
         def __init__(self):
             QMainWindow.__init__(self)
-            self.setMinimumSize(QSize(1800, 1000))    
+            #self.setMinimumSize(QSize(1800, 1000))    
             self.setWindowTitle("Hello world") 
     
             self.listWidget = GalleryWidget()
