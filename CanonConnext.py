@@ -17,6 +17,7 @@ import os
 import threading
 from bitarray import bitarray
 import exifread
+import sys
 
 # ---- GLOBAL VARIABLES -------
 
@@ -28,8 +29,17 @@ cameraIP = ''
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
-ip = ni.ifaddresses('wlp3s0')[ni.AF_INET][0]['addr']
-print(ip)
+for iface in ni.interfaces():
+    if ni.AF_INET in ni.ifaddresses(iface):
+        possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
+        if possibleIp != '127.0.0.1':
+            global ip
+            ip = possibleIp
+            break
+if not ip:
+    print("ERROR: could not get device's IP-Adress")
+    sys.exit(1)
+
 host_port = '49152'
 
 # DEVICE SETTINGS
@@ -451,11 +461,11 @@ def postFileGetResponse(url, path):
 
 GUIdevOnly = False
 if not GUIdevOnly:
-    t = threading.Thread(target=start_ssdp_response_server)
-    t.start()
+    ssdpThread = threading.Thread(target=start_ssdp_response_server)
+    ssdpThread.start()
     
-    t2 = threading.Thread(target=imink_response_sever)
-    t2.start()
+    iminkThread = threading.Thread(target=imink_response_sever)
+    iminkThread.start()
     while not connectedToCamera:
         if runSSDPOnAndOn:
             getCameraDevDesc()
@@ -653,8 +663,8 @@ if GUIdevOnly or resp.status_code is 200:
             postFileGetResponse(baseURL + 'DisconnectStatus', 'POSTrequests/powerOff.xml')
             #SSDP byebye
             sendNotify(stage='byebye')
-            t.quit()
-            t2.quit()
+            ssdpThread.quit()
+            iminkThread.quit()
             self.finished.emit()
     
     app = QtWidgets.QApplication(sys.argv)
