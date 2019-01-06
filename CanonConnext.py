@@ -18,6 +18,13 @@ import threading
 from bitarray import bitarray
 import exifread
 import sys
+from PyQt5 import QtWidgets
+from PyQt5.QtGui import QIcon, QPixmap, QTransform
+from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QAction, QProgressDialog
+from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal, Qt
+from requests_toolbelt.multipart import decoder
+import sys
+import qdarkstyle
 
 # ---- GLOBAL VARIABLES -------
 
@@ -335,7 +342,8 @@ def makeMobileDevDesc():
     specVersion = ET.SubElement(root, 'specVersion')
     ET.SubElement(specVersion, 'major').text = '1'
     ET.SubElement(specVersion, 'minor').text = '0'
-    #IP-address and port for ongoing conversation (this would be another way of hacking the system, but the camera accepts requests from any device in the network once it is "connected" to a device anyway)
+    #IP-address and port for ongoing conversation (this would be another way of hacking the system, but the camera accepts requests from
+    #any device in the network once it is "connected" to a device anyway)
     ET.SubElement(root, 'URLBase').text = 'http://' + ip + ':' + host_port + '/'
     device = ET.SubElement(root, 'device')
     ET.SubElement(device, 'deviceType').text = 'urn:schemas-upnp-org:device:Basic:1'
@@ -407,7 +415,7 @@ def getThumb(number):
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get(baseURL + 'ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
-        
+        #TODO: do this in a new thread for a SLIGHT performance improvement if 0.02s per preview image on a shitty CPU
         #-----------------------process EXIF tags-------------------------------------------------------
         
         #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
@@ -442,7 +450,6 @@ def getThumb(number):
             cameraObjects[number]['SizeAbrv'] = 'L'
             #we don't know but it's not worth the effort
             cameraObjects[number]['Orientation'] = 'Horizontal'
-        
         #save some important tags
         return extractThumbFromExifHeader(r2.content)
 
@@ -525,17 +532,10 @@ if GUIdevOnly or resp.status_code is 200:
     
     #start GUI to display thumbs
     
-    from PyQt5 import QtWidgets
-    from PyQt5.QtGui import QIcon, QPixmap, QTransform
-    from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QAction
-    from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal
-    from requests_toolbelt.multipart import decoder
-    import sys    
-    import qdarkstyle
-    
     class HelloWindow(QMainWindow):
         def __init__(self):
             QMainWindow.__init__(self)
+            #TODO: proper window sizing
             #self.setMinimumSize(QSize(1800, 1000))    
             self.setWindowTitle("Hello world") 
     
@@ -567,40 +567,64 @@ if GUIdevOnly or resp.status_code is 200:
             self.listWidget.addItem(gi)
             
         def downloadSelected(self):
+            '''Downlaod all selected items, further refered to as stack'''
+            #stop loading thumbs
+            #TODO: continue loading after download is finished
+            self.stopThumbLoading()
+
+            #show progress dialog
+            progressDialog = QProgressDialog("Initiating Download ...", "Cancel", 0, 100, self)
+            progressDialog.setWindowModality(Qt.WindowModal)
+            progressDialog.setWindowTitle("Downloading " + str(len(self.listWidget.selectedItems())) + " Pictures")
+            progressDialog.setMinimumDuration(0)
+
+            #total size of stack in bits (for showing the progress indicator)
+            totalSize = 0
+            totalDownloadedBits = 0
+            #calculate totalSize and save each item's size in order to download it
             for item in self.listWidget.selectedItems():
-                #stop loading thumbs                
-                self.stopThumbLoading()
                 currentNumber = item.getObjectNumber()
                 currentID = cameraObjects[currentNumber]['objID']
                 #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
                 #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
-                r = get(baseURL + 'ObjProperty?ObjID=' + 
-                                    currentID + '&ObjType=JPG')
-                #TODO: do exception stuff here
+                r = get(baseURL + 'ObjProperty?ObjID=' + currentID + '&ObjType=JPG')
+                #TODO: do better error handling here
                 if r.status_code == 200:
-                    dataSize = int(ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text)
-                    print('datasize: ', dataSize)
-                    receivedBytes = b''
-                    while len(receivedBytes) < dataSize:
-                        #get the image, unresized:
-                        #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
-                        url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
-                        if len(receivedBytes) != 0:
-                            url += '&Offset=' + str(len(receivedBytes))
-                        r = get(url)    
-                        multipart_data = decoder.MultipartDecoder.from_response(r)
-                        for part in multipart_data.parts:
-                            if b'application/octet-stream' in part.headers[b'Content-Type']:
-                                 #only JPEG necessary so far since CR2 and videos aren't supported yet
-                                 #TODO: fix extension for non-JPEGs (once supported)
-                                 receivedBytes += part.content                                 
-                                 print('already received: ', len(receivedBytes))
-                                 if len(receivedBytes) == dataSize:
-                                     with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.JPG', 'wb') as file:
-                                        file.write(receivedBytes)
+                    #save dataSize for actual downloading
+                    cameraObjects[currentNumber]['dataSize'] = int(ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text)
+                    totalSize += cameraObjects[currentNumber]['dataSize']
                 else:
-                    print('request failed')
-            
+                    print('ERROR requesting object with ID:', currentID, 'failed')
+            #reset dialog
+            progressDialog.setMaximum(totalSize)
+            #TODO: adjust title when video download is supported
+            progressDialog.setLabelText("Downloading and saving files (" + str(round(totalSize/1000000,1)) + "MB)")
+            progressDialog.setAutoClose(True)
+            #Download stack
+            for item in self.listWidget.selectedItems():
+                currentNumber = item.getObjectNumber()
+                currentID = cameraObjects[currentNumber]['objID']
+                dataSize = cameraObjects[currentNumber]['dataSize']
+                receivedBytes = b''
+                while len(receivedBytes) < dataSize:
+                    #get the image, unresized:
+                    #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
+                    url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
+                    if len(receivedBytes) != 0:
+                        url += '&Offset=' + str(len(receivedBytes))
+                    r = get(url)
+                    multipart_data = decoder.MultipartDecoder.from_response(r)
+                    for part in multipart_data.parts:
+                        if b'application/octet-stream' in part.headers[b'Content-Type']:
+                             #only JPEG necessary so far since CR2 and videos aren't supported yet
+                             #TODO: fix extension for non-JPEGs (once supported)
+                             receivedBytes += part.content
+                             totalDownloadedBits += len(part.content)
+                             progressDialog.setValue(totalDownloadedBits)
+                             if len(receivedBytes) == dataSize:
+                                 with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.JPG', 'wb') as file:
+                                    file.write(receivedBytes)
+
         def disconnectAndClose(self):
             #tell Camera to turn off and close app
             self.stopThumbLoading()
@@ -663,8 +687,8 @@ if GUIdevOnly or resp.status_code is 200:
             postFileGetResponse(baseURL + 'DisconnectStatus', 'POSTrequests/powerOff.xml')
             #SSDP byebye
             sendNotify(stage='byebye')
-            ssdpThread.quit()
-            iminkThread.quit()
+            #ssdpThread.quit()
+            #iminkThread.quit()
             self.finished.emit()
     
     app = QtWidgets.QApplication(sys.argv)
@@ -680,4 +704,4 @@ if GUIdevOnly or resp.status_code is 200:
         obj.addPic.connect(mainWin.addPic)
         obj.finished.connect(mainWin.close)
         objThread.start()
-    sys.exit( app.exec_() )
+    sys.exit(app.exec_())
