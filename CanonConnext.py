@@ -26,6 +26,12 @@ from requests_toolbelt.multipart import decoder
 import sys
 import qdarkstyle
 
+from PIL import Image
+from ptpip import PtpIpConnection
+from ptpip import PtpIpCmdRequest
+from threading import Thread
+
+
 # ---- GLOBAL VARIABLES -------
 
 runSSDPOnAndOn = True
@@ -532,12 +538,37 @@ if GUIdevOnly or resp.status_code is 200:
     
     #start GUI to display thumbs
     
+    class LiveShootWindow(QMainWindow):
+        def __init__(self, parent=None):
+            super(LiveShootWindow, self).__init__(parent)
+            
+        def startStream(self):
+            # open up a PTP/IP connection, default IP and Port is host='192.168.1.1', port=15740
+            ptpip = PtpIpConnection()
+            ptpip.open(host=cameraIP)
+            
+            # Start the Thread which is constantly checking the status of the camera and which is
+            # processing new command packages which should be send
+            thread = Thread(target=ptpip.communication_thread)
+            thread.daemon = True
+            thread.start()            
+            
+            print('PTP-IP started')
+            #op-code 0x9114 (no clue what it's for)
+            ptpip_cmd = PtpIpCmdRequest(cmd=0x06, param1=0x00000001, param2=0x914)
+            ptpip_packet = ptpip.send_ptpip_cmd(ptpip_cmd)
+            print(ptpip_packet)
+            
+        
+    
     class HelloWindow(QMainWindow):
         def __init__(self):
             QMainWindow.__init__(self)
             #TODO: proper window sizing
             #self.setMinimumSize(QSize(1800, 1000))    
             self.setWindowTitle("Hello world") 
+            
+            self.liveShootWindow = LiveShootWindow(self)
     
             self.listWidget = GalleryWidget()
             self.setCentralWidget(self.listWidget)
@@ -551,12 +582,18 @@ if GUIdevOnly or resp.status_code is 200:
             dowloadAct.setShortcut('Ctrl+D')
             dowloadAct.setStatusTip('Download selected images')
             dowloadAct.triggered.connect(self.downloadSelected)
+            
+            liveviewAct = QAction(QIcon.fromTheme('camera-photo'), 'Live shoot', self)
+            liveviewAct.setShortcut('Control+K')
+            liveviewAct.setStatusTip('Remote live view shooting')
+            liveviewAct.triggered.connect(self.startLiveview)
     
             self.statusBar()
     
             toolbar = self.addToolBar('Exit')
             toolbar.addAction(exitAct)
             toolbar.addAction(dowloadAct)
+            toolbar.addAction(liveviewAct)
             
             self.obj= SomeObject()
             self.objThread = QThread()
@@ -565,6 +602,19 @@ if GUIdevOnly or resp.status_code is 200:
             gi = GalleryItem(QIcon(pixmap),name)
             gi.setObjectNumber(number)
             self.listWidget.addItem(gi)
+            
+        def startLiveview(self):
+            '''initiate the live view remote show window'''
+            self.stopThumbLoading()
+            #stop object transer            
+            resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
+            if resp.status_code == 200:
+                #request the initiation of PTP
+                resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=RemoteCapture&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
+                print(resp)
+                if resp.status_code == 200:
+                    self.liveShootWindow.show()
+                    self.liveShootWindow.startStream()
             
         def downloadSelected(self):
             '''Downlaod all selected items, further refered to as stack'''
