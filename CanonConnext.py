@@ -27,8 +27,8 @@ import sys
 #import qdarkstyle
 
 from PIL import Image
-from ptpip import PtpIpConnection
-from ptpip import PtpIpCmdRequest
+from ptpip_mattis import PtpIpConnection
+from ptpip_mattis import PtpIpCmdRequest
 from threading import Thread
 
 
@@ -36,16 +36,17 @@ from threading import Thread
 
 runSSDPOnAndOn = True
 connectedToCamera = False
-debug = False
+debug = True
 
 cameraIP = ''
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
+#GLOBAL TODO: put try-catch into every request
 for iface in ni.interfaces():
     #temporary fix for the problem of having multiple interfaces and choosing the right one
-    #if iface == 'wlx24050f34378f':
-    if iface == 'enp2s0':
+    if iface == 'wlx24050f34378f':
+    #if iface == 'enp2s0':
         if ni.AF_INET in ni.ifaddresses(iface):
             possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
             if possibleIp != '127.0.0.1':
@@ -640,8 +641,8 @@ if GUIdevOnly or resp.status_code == 200:
                 print(resp)
                 if resp.status_code == 200:
                     print("Start gphoto now, camera IP is:", cameraIP)
-                    #self.liveShootWindow.show()
-                    #self.liveShootWindow.startStream()
+                    self.liveShootWindow.show()
+                    self.liveShootWindow.startStream()
 
         def downloadSelected(self):
             '''Downlaod all selected items, further refered to as stack'''
@@ -652,7 +653,7 @@ if GUIdevOnly or resp.status_code == 200:
             #show progress dialog
             progressDialog = QProgressDialog("Initiating Download ...", "Cancel", 0, 100, self)
             progressDialog.setWindowModality(Qt.WindowModal)
-            progressDialog.setWindowTitle("Downloading " + str(len(self.listWidget.selectedItems())) + " Pictures")
+            progressDialog.setWindowTitle("Downloading " + str(len(self.listWidget.selectedItems())) + " Pictures and Videos")
             progressDialog.setMinimumDuration(0)
 
             #total size of stack in bits (for showing the progress indicator)
@@ -662,9 +663,10 @@ if GUIdevOnly or resp.status_code == 200:
             for item in self.listWidget.selectedItems():
                 currentNumber = item.getObjectNumber()
                 currentID = cameraObjects[currentNumber]['objID']
+                currentType = cameraObjects[currentNumber]['objType']
                 #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
                 #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
-                r = get(baseURL + 'ObjProperty?ObjID=' + currentID + '&ObjType=JPG')
+                r = get(baseURL + 'ObjProperty?ObjID=' + currentID + '&ObjType=' + currentType)
                 #TODO: do better error handling here
                 if r.status_code == 200:
                     #save dataSize for actual downloading
@@ -672,35 +674,91 @@ if GUIdevOnly or resp.status_code == 200:
                     totalSize += cameraObjects[currentNumber]['dataSize']
                 else:
                     print('ERROR requesting object with ID:', currentID, 'failed')
+                    print("response:", r)
             #reset dialog
-            progressDialog.setMaximum(totalSize)
-            #TODO: adjust title when video download is supported
-            progressDialog.setLabelText("Downloading and saving files (" + str(round(totalSize/1000000,1)) + "MB)")
+            progressDialog.setValue(0)
             progressDialog.setAutoClose(True)
             #Download stack
             for item in self.listWidget.selectedItems():
                 currentNumber = item.getObjectNumber()
                 currentID = cameraObjects[currentNumber]['objID']
-                dataSize = cameraObjects[currentNumber]['dataSize']
+                currentDataSize= cameraObjects[currentNumber]['dataSize']
+                currentType = cameraObjects[currentNumber]['objType']
                 receivedBytes = b''
-                while len(receivedBytes) < dataSize:
+
+                #for MP4 Download: need to wait until processing/resizing/converting is done
+                if currentType == 'MP4':
+                    print("waiting for mp4 processing")
+                    progressDialog.setLabelText("Waiting for camera to convert video")
+                    progressDialog.setMaximum(100)
+                    #the response delivers the preparation status via <ObjStatus>PREPARING</ObjStatus> (other texts haven't been observed by me)
+                    #and progress via <Progress>x</Progress> in the resultSet xml with x = 0-100
+                    url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + currentType + '&ResizeDataSize=' + str(currentDataSize)
+                    r = get(url)
+                    if r.text.find('<ObjStatus>') != -1:
+                        preparingVideo = True
+                        while preparingVideo == True:
+                            #get continous status updates, in the pcap they were under 0.01s apart sometimes so no need to worry about spam
+                            r = get(url)
+                            responseXML = ""
+                            multipart_data = decoder.MultipartDecoder.from_response(r)
+                            for part in multipart_data.parts:
+                                if b'text/xml' in part.headers[b'Content-Type']:
+                                     responseXML += part.content.decode('utf-8')
+                            if r.status_code == 200:
+                                if r.text.find('<ObjStatus>') != -1:
+                                    #somehow the XML doesn't seem to be the only content or requests v2.22.0 doesn't detect properly
+                                    #resultXml = r.text[r.text.index("<?xml"):r.text.rindex(">")+1]
+                                    #todo: put this into a try
+                                    progress = int(ET.fromstring(removeXMLNamespace(responseXML)).find('Progress').text)
+                                    progressDialog.setValue(progress)
+                                    if debug: print("Progress: ", progress)
+
+                                else:
+                                    #preparation should be done now
+                                    if debug: print("mp4 processing done")
+                                    preparingVideo = False
+                                    #get actal data size (converting changes it, so we might get odd looking requests, where we seem to request beyond the end because we won't change the ResizeDataSize in the requests, but don't worry Canon does the same)
+                                    actualDataSize = int(ET.fromstring(removeXMLNamespace(responseXML)).find('TotalSize').text)
+                                    if debug: print("actual video size:", actualDataSize)
+                                    #correct the total size
+                                    totalSize = totalSize - currentDataSize + actualDataSize
+                                    #empty the first set of data
+                                    currentDataSize = actualDataSize
+                                    for part in multipart_data.parts:
+                                        if b'application/octet-stream' in part.headers[b'Content-Type']:
+                                             receivedBytes += part.content
+                                             totalDownloadedBits += len(part.content)
+                                             progressDialog.setValue(totalDownloadedBits)
+                            else:
+                                print('ERROR requesting object with ID:', currentID, 'failed')
+                                print("response:", r)
+
+                while len(receivedBytes) < currentDataSize:
                     #get the image, unresized:
+                    #same for MP4, except ObjType=MP4
                     #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
-                    url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=JPG' + '&ResizeDataSize=' + str(dataSize)
+                    url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + currentType + '&ResizeDataSize=' + str(currentDataSize)
                     if len(receivedBytes) != 0:
                         url += '&Offset=' + str(len(receivedBytes))
                     r = get(url)
-                    multipart_data = decoder.MultipartDecoder.from_response(r)
-                    for part in multipart_data.parts:
-                        if b'application/octet-stream' in part.headers[b'Content-Type']:
-                             #only JPEG necessary so far since CR2 and videos aren't supported yet
-                             #TODO: fix extension for non-JPEGs (once supported)
-                             receivedBytes += part.content
-                             totalDownloadedBits += len(part.content)
-                             progressDialog.setValue(totalDownloadedBits)
-                             if len(receivedBytes) == dataSize:
-                                 with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.JPG', 'wb') as file:
-                                    file.write(receivedBytes)
+                    if r.status_code == 200:
+                        #set/update the progress bar
+                        progressDialog.setMaximum(totalSize)
+                        progressDialog.setLabelText("Downloading and saving files (" + str(round(totalSize/1000000,1)) + "MB)")
+
+                        multipart_data = decoder.MultipartDecoder.from_response(r)
+                        for part in multipart_data.parts:
+                            if b'application/octet-stream' in part.headers[b'Content-Type']:
+                                 receivedBytes += part.content
+                                 totalDownloadedBits += len(part.content)
+                                 progressDialog.setValue(totalDownloadedBits)
+                                 if len(receivedBytes) == currentDataSize:
+                                     with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.' + currentType, 'wb') as file:
+                                        file.write(receivedBytes)
+                    else:
+                        print('ERROR requesting object with ID:', currentID, 'failed')
+                        print("response:", r)
 
         def disconnectAndClose(self):
             #tell Camera to turn off and close app

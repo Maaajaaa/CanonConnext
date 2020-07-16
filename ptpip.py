@@ -18,14 +18,13 @@ class PtpIpConnection(object):
         self.event_queue = []
         self.object_queue = []
 
-    def open(self, host='192.168.1.1', port=15740):
+    def open(self, host='192.168.0.1', port=15740):
         # Open both session, first one for for commands, second for events
         self.session = self.connect(host=host, port=port)
         self.send_recieve_ptpip_packet(PtpIpInitCmdReq(), self.session)
-        print("sessionID:",self.session_id)
         self.session_events = self.connect(host=host, port=port)
-        self.send_recieve_ptpip_packet(PtpIpEventReq(session_id = self.session_id), self.session_events)
-        print("opening session")
+        self.send_recieve_ptpip_packet(PtpIpEventReq(), self.session_events)
+
         # 0x1002 OpenSession
         ptip_cmd = PtpIpCmdRequest(cmd=0x1002, param1=struct.unpack('L', self.session_id)[0])
         self.send_recieve_ptpip_packet(ptip_cmd, self.session)
@@ -59,7 +58,7 @@ class PtpIpConnection(object):
     def send_ptpip_cmd(self, ptpip_packet):
         self.cmd_queue.append(ptpip_packet)
 
-    def connect(self, host='192.168.1.1', port=15740):
+    def connect(self, host='192.168.0.1', port=15740):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -145,7 +144,6 @@ class PtpIpConnection(object):
         print("Laenge des Paketes: " + str(data_length))
         while (data_length) > len(data):
             data += session.recv(data_length - len(data))
-        print(data[4:])
         return data[4:]
 
 
@@ -193,14 +191,17 @@ class PtpIpInitCmdReq(PtpIpPacket):
     def __init__(self, data=None):
         super(PtpIpInitCmdReq, self).__init__()
         self.cmdtype = struct.pack('I', 0x01)
-        #TODO: Implement properly
-        self.guid = bytes.fromhex('7B788B31EC1E445AB5EF243274B188F6')
-        self.hostname = "C\x00a\x00n\x00o\x00n\x00 \x00C\x00o\x00n\x00n\x00e\x00x\x00t" + '\x00'
-        self.hostname = self.hostname.encode()
-        self.version = struct.pack('HH', 0, 1)
-        
+        if data is None:
+            guid = uuid.uuid4()
+            self.guid = guid.bytes
+            self.hostname = socket.gethostname() + '\x00'
+            self.hostname = self.hostname.encode()
+        else:
+            self.guid = data[0:16]
+            self.hostname = data[16:0]
+
     def data(self):
-        return self.cmdtype + self.guid + self.hostname + self.version
+        return self.cmdtype + self.guid + self.hostname
 
 
 class PtpIpInitCmdAck(PtpIpPacket):
@@ -213,17 +214,17 @@ class PtpIpInitCmdAck(PtpIpPacket):
             self.guid = data[4:20]
             self.hostname = data[20:]
 
-# TODO: patch properly
+
 class PtpIpEventReq(PtpIpPacket):
     """docstring for PtpIpInitCmd"""
     def __init__(self, data=None, session_id=None):
         super(PtpIpEventReq, self).__init__()
         self.cmdtype = struct.pack('I', 0x03)
-        self.session_id = session_id
-        """if data is not None:
+        self.session_id = None
+        if data is not None:
             self.session_id = data[0:4]
         elif session_id is not None:
-            self.session_id = session_id"""
+            self.session_id = session_id
 
     def data(self):
         return self.cmdtype + self.session_id
