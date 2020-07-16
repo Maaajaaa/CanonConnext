@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstract
 from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal, Qt
 from requests_toolbelt.multipart import decoder
 import sys
-import qdarkstyle
+#import qdarkstyle
 
 from PIL import Image
 from ptpip import PtpIpConnection
@@ -43,12 +43,16 @@ cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
 for iface in ni.interfaces():
-    if ni.AF_INET in ni.ifaddresses(iface):
-        possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
-        if possibleIp != '127.0.0.1':
-            global ip
-            ip = possibleIp
-            break
+    #temporary fix for the problem of having multiple interfaces and choosing the right one
+    #if iface == 'wlx24050f34378f':
+    if iface == 'enp2s0':
+        if ni.AF_INET in ni.ifaddresses(iface):
+            possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
+            if possibleIp != '127.0.0.1':
+                global ip
+                ip = possibleIp
+                break
+print(ip)
 if not ip:
     print("ERROR: could not get device's IP-Adress")
     sys.exit(1)
@@ -80,7 +84,7 @@ ffd9 = bitarray()
 ffd9.frombytes(b'\xFF\xD9')
 
 # HTTPRequestHandler class
-class iminkRequestHandler(SimpleHTTPRequestHandler):  
+class iminkRequestHandler(SimpleHTTPRequestHandler):
     CCMRequested = False
     server_version = 'OS/Version UPnP/1.0'
     sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
@@ -91,17 +95,17 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
         body = self.rfile.read(content_length)
         bodyStr = body.decode('utf-8')
         requestKnown = False
-        
+
         #Detecting Run status request and answering with statusReplyRun.xml:
         if '<Status>Run</Status>' in bodyStr:
             requestKnown = True
             #TODO: put this in a try loop
             with open('GETreplies/statusRunReply.xml') as replyFile:
-                    replyStr = replyFile.read()  
-                    self.sendResponse(replyStr)      
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)
             if debug:print('Status Run request handled')
             return
-            
+
         #Acknowledge CapabilityInfo
         if '<Pull_Operating>' in bodyStr:
             requestKnown = True
@@ -110,37 +114,37 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
                     self.sendResponse(replyStr)
             if debug:print('CapabilityInfo acknowledged')
             return
-            
+
         #Acknowledge CameraInfo
         if '<CardProtect>' in bodyStr:
             requestKnown = True
             with open('GETreplies/null.xml') as replyFile:
                     replyStr = replyFile.read()
-                    self.sendResponse(replyStr)      
+                    self.sendResponse(replyStr)
             if debug:print('CameraInfo acknowledged')
             return
-        
+
         #Acknowledge NCFData
         if '<AARData>' in bodyStr:
             requestKnown = True
             with open('GETreplies/null.xml') as replyFile:
                     replyStr = replyFile.read()
-                    self.sendResponse(replyStr)      
+                    self.sendResponse(replyStr)
             if debug:print('NFCData acknowledged')
             return
-        
+
         #Detect Status Stop
         if '<Status>Stop</Status>' in bodyStr:
             requestKnown = True
             #TODO: put this in a try loop
             with open('GETreplies/statusStopReply.xml') as replyFile:
-                    replyStr = replyFile.read()  
-                    self.sendResponse(replyStr)                     
+                    replyStr = replyFile.read()
+                    self.sendResponse(replyStr)
             print("Status Stop request handled, in other words: We're in")
             global connectedToCamera
-            connectedToCamera = True   
+            connectedToCamera = True
             return
-        
+
         if not requestKnown:
             response = BytesIO()
             self.send_response(200)
@@ -151,26 +155,26 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             print(self.headers)
             print('body: ' + bodyStr)
             self.wfile.write(response.getvalue())
-        
+
     def sendResponse(self, bodyStr):
         """Takes a string and sends it as a reponse to a GET-request with apporpriate headers"""
         #header
         content_length = len(str.encode(bodyStr))
-        if content_length is 0:
-            self.send_response_only(HTTPStatus.OK)            
+        if content_length == 0:
+            self.send_response_only(HTTPStatus.OK)
             self.send_header("Content-Length", content_length)
             self.send_header('Server', self.version_string())
             self.send_header('Date', self.date_time_string())
         else:
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Length", content_length)
-        if content_length is not 0:
+        if content_length != 0:
             self.send_header("Content-Type", 'text/xml ; charset=utf-8')
         self.end_headers()
         response = BytesIO()
         response.write(str.encode(bodyStr))
         self.wfile.write(response.getvalue())
-        
+
     def do_GET(self):
         """Serve a GET request and send a request RIGHT after CameraConnectedMobile.xml is requestested for the first time"""
         f = self.send_head()
@@ -182,7 +186,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
                     self.CCMRequested = True
             finally:
                 f.close()
-                
+
 def imink_response_sever():
     print('starting server in separate thread')
     #change dir to serverFiles
@@ -195,7 +199,7 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
     #CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped
     CCMRequested = False
     def do_GET(self):
-        """Serve a GET request and send a GET request RIGHT after request for 
+        """Serve a GET request and send a GET request RIGHT after request for
            CameraConnectedMobile.xml the first time to skip long waits"""
         f = self.send_head()
         global cameraIP
@@ -208,20 +212,20 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                     self.CCMRequested = True
                     global runSSDPOnAndOn
                     runSSDPOnAndOn = False
-                    
+
                     r = get('http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6')
                     MobileConnectedCamera = r.text
                     if debug: print("\n\nGot MobileConnectedCamera.xml:\n", MobileConnectedCamera, "\n\n")
             finally:
                 f.close()
-                
+
 def start_ssdp_response_server():
     print('starting server in separate thread')
     #change dir to serverFiles
     server_address = ('', 49152)
     server = HTTPServer(server_address, SSDP_RequestHandler)
     server.serve_forever()
-    
+
 
 # -------------SSDP M-SEARCH Messages----------------
 mSerachMsgCanon = \
@@ -241,9 +245,9 @@ mSerachMsgEOS = \
 
 def defineNotifications(stage):
     """set notifyBase and notifyExtension to the right stage"""
-    
+
     global notifyBase, notifyExtension
-    
+
     if stage == 'alive':
         #proper introduction
         notifyBase =  \
@@ -253,74 +257,74 @@ def defineNotifications(stage):
             'Location: http://'+ ip + ':' + host_port + '/MobileDevDesc.xml\r\n' \
             'Server: Camera OS/1.0 UPnP/1.0 ' + system + '/' + friendly_name + '/1.0\r\n'\
             'NTS: ssdp:alive\r\n' \
-        
+
         notifyExtension[0] = \
             'NT: upnp:rootdevice\r\n' \
             'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
             '\r\n'
-            
+
         notifyExtension[1] = \
             'NT: uuid:' + uuid + '\r\n' \
             'USN: uuid:' + uuid + '\r\n' \
             '\r\n'
-            
+
         notifyExtension[2] = \
             'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
             '\r\n'
-            
+
         notifyExtension[3] = \
             'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
             '\r\n'
-            
+
     if stage == 'byebye':
         notifyBase = \
         'NOTIFY * HTTP/1.1\r\n' \
         'Host: 239.255.255.250:1900\r\n' \
-        'NTS: ssdp:byebye\r\n' 
-        
+        'NTS: ssdp:byebye\r\n'
+
         notifyExtension[0] = \
             'NT: upnp:rootdevice\r\n' \
             'USN: uuid:' + uuid + '::upnp:rootdevice\r\n' \
             '\r\n'
-        
+
         notifyExtension[1] = \
             'NT: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5\r\n' \
             'USN: uuid:' + uuid + '\r\n' \
             '\r\n'
-            
+
         notifyExtension[2] = \
             'NT: urn:schemas-upnp-org:device:Basic:1\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-upnp-org:device:Basic:1\r\n' \
             '\r\n'
-            
+
         notifyExtension[3] = \
             'NT: urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
             'USN: uuid:' + uuid + '::urn:schemas-canon-com:service:CameraConnectedMobileService:1\r\n' \
             '\r\n'
-        
+
 def sendNotify(stage):
     """"SEND NOTIFY messsage of given stage"""
-    
+
     global gotData, data
-    
-    defineNotifications(stage)    
+
+    defineNotifications(stage)
     # Set up UDP socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     s.settimeout(3)
-    
+
     for i in range(4):
         # send 4 messages
         for j in range(4):
             s.sendto(str.encode(notifyBase + notifyExtension[i]), ('239.255.255.250', 1900) )
-        
+
         # send 3 searches of each type
         for i in range(3):
             s.sendto(str.encode(mSerachMsgEOS), ('239.255.255.250', 1900) )
             s.sendto(str.encode(mSerachMsgCanon), ('239.255.255.250', 1900) )
-        
-    #listen for 3 seconds    
+
+    #listen for 3 seconds
     #this is a bad way but should do it for now, will cause issues when other Upnp devices are in the same network
     try:
         while True:
@@ -331,19 +335,19 @@ def sendNotify(stage):
     except socket.timeout:
         pass
 
-    
+
 def getCameraDevDesc():
     #request and read the CameraDevDesc.xml
-    
+
     global gotData, data
     if gotData:
         url = re.search("(?P<url>https?://[^\s]+)", data.decode("utf-8")).group("url")
         r = get(url)
         CameraDevDesc = r.text
         if debug: print("\n\nGot CameraDevDesc.xml:\n", CameraDevDesc, "\n\n")
-        
+
 def makeMobileDevDesc():
-    #make MobileDevDesc.xml, modifying get's messy because of the partial namespace  
+    #make MobileDevDesc.xml, modifying get's messy because of the partial namespace
     root = ET.Element('root', xmlns="urn:schemas-upnp-org:device-1-0")
     specVersion = ET.SubElement(root, 'specVersion')
     ET.SubElement(specVersion, 'major').text = '1'
@@ -378,52 +382,52 @@ def makeMobileDevDesc():
     nsElement3.text = '1-1502.0.0.0'
     nsElement3.set('xmlns:ns', "urn:schemas-canon-com:schema-imink")
     ET.SubElement(device, 'presentationURL').text = '/'
-    
+
     tree = ET.ElementTree(root)
     tree.write("MobileDevDesc.xml")
-    
+
 def removeXMLNamespace(xmlstring):
     xmlstring = re.sub(r'\sxmlns="[^"]+"', '', xmlstring, count=1)
     return xmlstring
 
 def extractThumbFromExifHeader(exitfbytes):
     """
-    Extract JPEG thumbnail from Exif header, this method is pretty hacky and 
-    only works well in THIS case because they're all the same, the standard is 
+    Extract JPEG thumbnail from Exif header, this method is pretty hacky and
+    only works well in THIS case because they're all the same, the standard is
     much broader
     """
-    
+
 
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
-    
+
     ffd8db = bitarray()
     #FFDB was found as a common thing in all thumbs
     ffd8db.frombytes(b'\xFF\xD8\xFF\xDB')
-    
-    ffd8s = exifbits.search(ffd8db) 
+
+    ffd8s = exifbits.search(ffd8db)
     ffd9s = exifbits.search(ffd9)
-    
+
     #cut from the occurence of ffd8ffe1 to ffd9 but include ffd9 which is 16 BITS long
     for i in range(0, len(ffd8s)):
         if ffd9s[len(ffd9s)-1]+16 - ffd8s[i] > 0:
             exifbits = exifbits[ffd8s[i]:ffd9s[len(ffd9s)-1]+16]
-    
-            if debug: 
+
+            if debug:
                 with open('pyExtractedThumb.jpg', 'wb') as file:
                     exifbits.tofile(file)
-            
+
             return exifbits.tobytes()
 
 def getThumb(number):
     #make sure we don't request an invalid EXIF header / thumb
-    if number < totalNumOfItemsOnCamera:        
+    if number < totalNumOfItemsOnCamera:
         #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
         #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get(baseURL + 'ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
         #TODO: do this in a new thread for a SLIGHT performance improvement if 0.02s per preview image on a shitty CPU
         #-----------------------process EXIF tags-------------------------------------------------------
-        
+
         #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
         bitcent = bitarray()
         bitcent.frombytes(r2.content)
@@ -433,8 +437,8 @@ def getThumb(number):
             vincentAdultman = BufferedRandom(BytesIO())
             vincentAdultman.write(bitcent[exifstart:len(bitcent)-exifstart].tobytes())
             vincentAdultman.seek(0)
-            
-            if debug: 
+
+            if debug:
                 with open('r2.txt', 'wb') as txt:
                     txt.write(r2.text.encode())
             #read EXIF-tags but don't process the thumb (method below is much faster)
@@ -442,11 +446,11 @@ def getThumb(number):
             #print(tags)
             #put relevant tags into cameraObjects
             cameraObjects[number]['Resolution'] = str(tags['EXIF ExifImageWidth']) + 'x' + str(tags['EXIF ExifImageLength'])
-            if int(str(tags['EXIF ExifImageWidth'])) is not 160:
-                cameraObjects[number]['SizeAbrv'] = getImageSizeAbbrevation(str(tags['Image Model']), str(tags['EXIF ExifImageWidth']))   
+            if int(str(tags['EXIF ExifImageWidth'])) != 160:
+                cameraObjects[number]['SizeAbrv'] = getImageSizeAbbrevation(str(tags['Image Model']), str(tags['EXIF ExifImageWidth']))
             else:
                 cameraObjects[number]['SizeAbrv'] = '?'
-            cameraObjects[number]['Orientation'] = str(tags['Image Orientation'])            
+            cameraObjects[number]['Orientation'] = str(tags['Image Orientation'])
             dt = str(tags['EXIF DateTimeDigitized'])
             cameraObjects[number]['Date'] = dt.translate({ord(c): None for c in ': '})
         else:
@@ -460,13 +464,13 @@ def getThumb(number):
         return extractThumbFromExifHeader(r2.content)
 
 def getImageSizeAbbrevation(imageModel, imageWidth):
-    CameraModelImageSizeAbbrevations = { 
+    CameraModelImageSizeAbbrevations = {
     'Canon PowerShot G7 X':{'5472':'L', '4320':'M1', '2304':'M2', '1920':'M2', '720':'S'}
     }
     return CameraModelImageSizeAbbrevations[imageModel][imageWidth]
 
 def postFileGetResponse(url, path):
-    with open(path) as requestFile:      
+    with open(path) as requestFile:
         req = Request('POST', url, data=str.encode(requestFile.read()), headers= {'Content-Type':'text/xml ; charset=utf-8'})
     return Session().send(req.prepare())
 
@@ -476,7 +480,7 @@ GUIdevOnly = False
 if not GUIdevOnly:
     ssdpThread = threading.Thread(target=start_ssdp_response_server)
     ssdpThread.start()
-    
+
     iminkThread = threading.Thread(target=imink_response_sever)
     iminkThread.start()
     while not connectedToCamera:
@@ -489,29 +493,29 @@ if not GUIdevOnly:
             sleep(0.01)
 
 if not GUIdevOnly:
-    
+
     #We're in like Flinn
     baseURL = 'http://' + cameraIP + ':8615/MobileConnectedCamera/'
     resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
     if debug: print(resp.status_code, resp.content)
-        
+
     resp = get(baseURL + 'ObjIDList?StartIndex=1&MaxNum=1&ObjType=ALL')
-    
+
     if debug: print(resp.status_code, resp.content)
-if GUIdevOnly or resp.status_code is 200:
+if GUIdevOnly or resp.status_code == 200:
     if not GUIdevOnly:
         #removing the namespaces makes parsing much simpler
         resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")))
         totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
-        
+
         """
         cameraObjects is a list, starting at the oldest object, of dictionaries containing
         objID: unique identifier of each picture given to it by the camera, required for loading the EXIF header and downloadig the image
         objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
         groupNbr: number of pictures in a group of pictures taken in CreativeShot mode, all of them seem to be refferenced by the same ID
         """
-        cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)] 
-        
+        cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)]
+
         #get IDs, types and groups
         objectsIndexed = 0
         while objectsIndexed < totalNumOfItemsOnCamera:
@@ -519,7 +523,7 @@ if GUIdevOnly or resp.status_code is 200:
             r = get(baseURL + 'GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
             resultSet = ET.fromstring(removeXMLNamespace(r.text) )
             if debug: print(resultSet)
-            for listID in range(1,int(resultSet.find('ListCount').text) + 1): 
+            for listID in range(1,int(resultSet.find('ListCount').text) + 1):
                 listIDStr = str(listID)
                 #find dictionary entries
                 groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
@@ -527,95 +531,118 @@ if GUIdevOnly or resp.status_code is 200:
                 objID = resultSet.find('ObjIDList-' + listIDStr).text
                 #add dictionary of current object to the listd
                 cameraObjects[objectsIndexed]={'objID':objID, 'objType':objType, 'groupNbr':groupNbr}
-                
+
                 objectsIndexed += 1
                 #picture groups from creative shots count as one item since they have only one ID afaik
-                if int(groupNbr) is not 0:
+                if int(groupNbr) != 0:
                     totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
-                
+
             if debug: print('Got soo many Elements:' + str(objectsIndexed))
         if debug: print(cameraObjects)
-    
+
     #start GUI to display thumbs
-    
+
     class LiveShootWindow(QMainWindow):
         def __init__(self, parent=None):
             super(LiveShootWindow, self).__init__(parent)
-            
+
         def startStream(self):
+
             # open up a PTP/IP connection, default IP and Port is host='192.168.1.1', port=15740
             ptpip = PtpIpConnection()
             ptpip.open(host=cameraIP)
-            
+
             # Start the Thread which is constantly checking the status of the camera and which is
             # processing new command packages which should be send
             thread = Thread(target=ptpip.communication_thread)
             thread.daemon = True
-            thread.start()            
-            
+            thread.start()
+
+            sleep(1.5)
             print('PTP-IP started')
-            #op-code 0x9114 (no clue what it's for)
-            ptpip_cmd = PtpIpCmdRequest(cmd=0x06, param1=0x00000001, param2=0x914)
-            ptpip_packet = ptpip.send_ptpip_cmd(ptpip_cmd)
-            print(ptpip_packet)
-            
-        
-    
+            #op-code 0x9114: TP_OC_CANON_EOS_SetRemoteMode
+            ptpip_cmd =  PtpIpCmdRequest(cmd=0x9114, param1=0x11)
+            ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
+            print('9114 apended')
+            sleep(1.5)
+            #op-code 0x9115: PTP_OC_CANON_EOS_SetEventMode
+            ptpip_cmd = PtpIpCmdRequest(cmd=0x9115, param1=0x2)
+            ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
+            print('9115 appended')
+
+            sleep(1.5)
+            #op-code 0x9116: PTP_OC_CANON_EOS_GetEvent
+            #This retrieves configuration status/updates/changes on EOS cameras. It reads a datablock which has a list of variable sized structures.
+            ptpip_cmd = PtpIpCmdRequest(cmd=0x09116)
+            ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
+            print('9116 appended')
+
+            sleep(1.5)
+            #op-code 0x9110: PTP_OC_CANON_EOS_SetDevicePropValueEx
+            #some value(s) is/are set, in my dump it's
+            '''ptpip_cmd = PtpIpCmdRequest(cmd=0x09110)
+            ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
+            print('9110 sent')
+
+            sleep(2)'''
+
+
     class HelloWindow(QMainWindow):
         def __init__(self):
             QMainWindow.__init__(self)
             #TODO: proper window sizing
-            #self.setMinimumSize(QSize(1800, 1000))    
-            self.setWindowTitle("Hello world") 
-            
+            #self.setMinimumSize(QSize(1800, 1000))
+            self.setWindowTitle("Cannon Connext")
+
             self.liveShootWindow = LiveShootWindow(self)
-    
+
             self.listWidget = GalleryWidget()
             self.setCentralWidget(self.listWidget)
-            
+
             exitAct = QAction(QIcon.fromTheme('application-exit'), 'Exit', self)
             exitAct.setShortcut('Ctrl+Q')
             exitAct.setStatusTip('Quit')
             exitAct.triggered.connect(self.disconnectAndClose)
-            
+
             dowloadAct = QAction(QIcon.fromTheme('emblem-downloads'), 'Download selected images', self)
             dowloadAct.setShortcut('Ctrl+D')
             dowloadAct.setStatusTip('Download selected images')
             dowloadAct.triggered.connect(self.downloadSelected)
-            
+
             liveviewAct = QAction(QIcon.fromTheme('camera-photo'), 'Live shoot', self)
             liveviewAct.setShortcut('Control+K')
             liveviewAct.setStatusTip('Remote live view shooting')
             liveviewAct.triggered.connect(self.startLiveview)
-    
+
             self.statusBar()
-    
+
             toolbar = self.addToolBar('Exit')
             toolbar.addAction(exitAct)
             toolbar.addAction(dowloadAct)
             toolbar.addAction(liveviewAct)
-            
+
             self.obj= SomeObject()
             self.objThread = QThread()
-            
+
         def addPic(self,pixmap,name, number):
             gi = GalleryItem(QIcon(pixmap),name)
             gi.setObjectNumber(number)
             self.listWidget.addItem(gi)
-            
+
         def startLiveview(self):
             '''initiate the live view remote show window'''
             self.stopThumbLoading()
-            #stop object transer            
+            #stop object transer
             resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             if resp.status_code == 200:
                 #request the initiation of PTP
                 resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=RemoteCapture&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
                 print(resp)
                 if resp.status_code == 200:
-                    self.liveShootWindow.show()
-                    self.liveShootWindow.startStream()
-            
+                    print("Start gphoto now, camera IP is:", cameraIP)
+                    #self.liveShootWindow.show()
+                    #self.liveShootWindow.startStream()
+
         def downloadSelected(self):
             '''Downlaod all selected items, further refered to as stack'''
             #stop loading thumbs
@@ -681,12 +708,12 @@ if GUIdevOnly or resp.status_code is 200:
             postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             self.obj.shutDownCamera()
             #self.close()
-            
+
         def stopThumbLoading(self):
             self.obj.stop()
             self.objThread.quit()
             self.objThread.wait()
-            
+
     class GalleryWidget(QListWidget):
         def __init__(self, parent=None):
             super(GalleryWidget, self).__init__(parent)
@@ -694,43 +721,43 @@ if GUIdevOnly or resp.status_code is 200:
             self.setIconSize(QSize(200,200))
             self.setResizeMode(QListWidget.Adjust)
             self.setDragEnabled(False)
-            self.setSelectionMode(QAbstractItemView.ExtendedSelection)        
-            
+            self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
     class GalleryItem(QListWidgetItem):
         def setObjectNumber(self, number):
             self.objectNumber = number
-            
+
         def getObjectNumber(self):
             return self.objectNumber
-                
+
     class SomeObject(QObject):
-    
+
         finished = pyqtSignal()
         addPic = pyqtSignal(QPixmap, str, int)
         stopNow = False
-    
+
         def runner(self):
             for i in range(1,totalNumOfItemsOnCamera):
                 qp = QPixmap()
                 #we want to see newest first but numbering starts at oldest
                 currentID = totalNumOfItemsOnCamera-i
                 qp.loadFromData(getThumb(currentID))
-                
+
                 #rotate pixmap
                 if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CW':
                     qp = qp.transformed(QTransform().rotate(90))
-                    
+
                 if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CCW':
                     qp = qp.transformed(QTransform().rotate(270))
-                    
+
                 self.addPic.emit(qp, cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
                 if self.stopNow:
                     break
             #self.finished.emit()
-            
+
         def stop(self):
             self.stopNow = True
-            
+
         def shutDownCamera(self):
             sleep(2)
             postFileGetResponse(baseURL + 'UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
@@ -740,9 +767,9 @@ if GUIdevOnly or resp.status_code is 200:
             #ssdpThread.quit()
             #iminkThread.quit()
             self.finished.emit()
-    
+
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
+    #app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     mainWin = HelloWindow()
     mainWin.show()
     if not GUIdevOnly:
