@@ -20,13 +20,11 @@ import exifread
 import sys
 from PyQt5 import QtWidgets
 from PyQt5.QtGui import QIcon, QPixmap, QTransform
-from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QAction, QProgressDialog
+from PyQt5.QtWidgets import QMainWindow, QListWidget, QListWidgetItem, \
+    QAbstractItemView, QAction, QProgressDialog
 from PyQt5.QtCore import QSize, QThread, QObject, pyqtSignal, Qt
 from requests_toolbelt.multipart import decoder
-import sys
-#import qdarkstyle
-
-from PIL import Image
+# import qdarkstyle\
 from ptpip_mattis import PtpIpConnection
 from ptpip_mattis import PtpIpCmdRequest
 from threading import Thread
@@ -42,11 +40,11 @@ cameraIP = ''
 cameraObjects = []
 totalNumOfItemsOnCamera = 0
 
-#GLOBAL TODO: put try-catch into every request
+# GLOBAL TODO: put try-catch into every request
 for iface in ni.interfaces():
-    #temporary fix for the problem of having multiple interfaces and choosing the right one
-    if iface == 'wlx24050f34378f':
-    #if iface == 'enp2s0':
+    # temporary fix for the problem of having multiple interfaces and choosing the right one
+    if iface == 'wlp3s0':
+    # if iface == 'enp2s0':
         if ni.AF_INET in ni.ifaddresses(iface):
             possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
             if possibleIp != '127.0.0.1':
@@ -62,10 +60,10 @@ host_port = '49152'
 
 # DEVICE SETTINGS
 
-#TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
+# TODO: create unique uuid when name changes, f.e. constant+name's MD5 or so
 uuid = '7B788B31-EC1E-445A-B5EF-243274B188F6'
 
-#os and name should not contain /
+# os and name should not contain /
 system = 'Debian 9'
 friendly_name = 'Cannon Connext'
 
@@ -77,12 +75,13 @@ notifyExtension = ['' for x in range(4)]
 gotData = 0
 data = ''
 
-#constants to make life easy
+# constants to make life easy
 
 ffd8 = bitarray()
 ffd8.frombytes(b'\xFF\xD8')
 ffd9 = bitarray()
 ffd9.frombytes(b'\xFF\xD9')
+
 
 # HTTPRequestHandler class
 class iminkRequestHandler(SimpleHTTPRequestHandler):
@@ -91,23 +90,23 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
     sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
 
     def do_POST(self):
-        """Methode to handle POST requests"""
+        """Methode to handle POST requests."""
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
         bodyStr = body.decode('utf-8')
         requestKnown = False
 
-        #Detecting Run status request and answering with statusReplyRun.xml:
+        # Detecting Run status request and answering with statusReplyRun.xml:
         if '<Status>Run</Status>' in bodyStr:
             requestKnown = True
-            #TODO: put this in a try loop
+            # TODO: put this in a try loop
             with open('GETreplies/statusRunReply.xml') as replyFile:
                     replyStr = replyFile.read()
                     self.sendResponse(replyStr)
             if debug:print('Status Run request handled')
             return
 
-        #Acknowledge CapabilityInfo
+        # Acknowledge CapabilityInfo
         if '<Pull_Operating>' in bodyStr:
             requestKnown = True
             with open('GETreplies/null.xml') as replyFile:
@@ -116,7 +115,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             if debug:print('CapabilityInfo acknowledged')
             return
 
-        #Acknowledge CameraInfo
+        # Acknowledge CameraInfo
         if '<CardProtect>' in bodyStr:
             requestKnown = True
             with open('GETreplies/null.xml') as replyFile:
@@ -125,7 +124,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             if debug:print('CameraInfo acknowledged')
             return
 
-        #Acknowledge NCFData
+        # Acknowledge NCFData
         if '<AARData>' in bodyStr:
             requestKnown = True
             with open('GETreplies/null.xml') as replyFile:
@@ -134,10 +133,10 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             if debug:print('NFCData acknowledged')
             return
 
-        #Detect Status Stop
+        # Detect Status Stop
         if '<Status>Stop</Status>' in bodyStr:
             requestKnown = True
-            #TODO: put this in a try loop
+            # TODO: put this in a try loop
             with open('GETreplies/statusStopReply.xml') as replyFile:
                     replyStr = replyFile.read()
                     self.sendResponse(replyStr)
@@ -159,7 +158,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
 
     def sendResponse(self, bodyStr):
         """Takes a string and sends it as a reponse to a GET-request with apporpriate headers"""
-        #header
+        # header
         content_length = len(str.encode(bodyStr))
         if content_length == 0:
             self.send_response_only(HTTPStatus.OK)
@@ -190,14 +189,14 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
 
 def imink_response_sever():
     print('starting server in separate thread')
-    #change dir to serverFiles
+    # change dir to serverFiles
     server_address = ('', 8615)
     server = HTTPServer(server_address, iminkRequestHandler)
     server.serve_forever()
 
 
 class SSDP_RequestHandler(SimpleHTTPRequestHandler):
-    #CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped
+    # CameraConnectedMobile Request tracking variable, if camera requests it, SSDP-Server can be stopped
     CCMRequested = False
     def do_GET(self):
         """Serve a GET request and send a GET request RIGHT after request for
@@ -220,9 +219,10 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
             finally:
                 f.close()
 
+
 def start_ssdp_response_server():
     print('starting server in separate thread')
-    #change dir to serverFiles
+    # change dir to serverFiles
     server_address = ('', 49152)
     server = HTTPServer(server_address, SSDP_RequestHandler)
     server.serve_forever()
@@ -250,7 +250,7 @@ def defineNotifications(stage):
     global notifyBase, notifyExtension
 
     if stage == 'alive':
-        #proper introduction
+        # proper introduction
         notifyBase =  \
             'NOTIFY * HTTP/1.1\r\n' \
             'Host: 239.255.255.250:1900\r\n' \
@@ -325,8 +325,8 @@ def sendNotify(stage):
             s.sendto(str.encode(mSerachMsgEOS), ('239.255.255.250', 1900) )
             s.sendto(str.encode(mSerachMsgCanon), ('239.255.255.250', 1900) )
 
-    #listen for 3 seconds
-    #this is a bad way but should do it for now, will cause issues when other Upnp devices are in the same network
+    # listen for 3 seconds
+    # this is a bad way but should do it for now, will cause issues when other Upnp devices are in the same network
     try:
         while True:
             data, addr = s.recvfrom(65507)
@@ -338,7 +338,7 @@ def sendNotify(stage):
 
 
 def getCameraDevDesc():
-    #request and read the CameraDevDesc.xml
+    # request and read the CameraDevDesc.xml
 
     global gotData, data
     if gotData:
@@ -348,18 +348,18 @@ def getCameraDevDesc():
         if debug: print("\n\nGot CameraDevDesc.xml:\n", CameraDevDesc, "\n\n")
 
 def makeMobileDevDesc():
-    #make MobileDevDesc.xml, modifying get's messy because of the partial namespace
+    # make MobileDevDesc.xml, modifying get's messy because of the partial namespace
     root = ET.Element('root', xmlns="urn:schemas-upnp-org:device-1-0")
     specVersion = ET.SubElement(root, 'specVersion')
     ET.SubElement(specVersion, 'major').text = '1'
     ET.SubElement(specVersion, 'minor').text = '0'
-    #IP-address and port for ongoing conversation (this would be another way of hacking the system, but the camera accepts requests from
-    #any device in the network once it is "connected" to a device anyway)
+    # IP-address and port for ongoing conversation (this would be another way of hacking the system, but the camera accepts requests from
+    # any device in the network once it is "connected" to a device anyway)
     ET.SubElement(root, 'URLBase').text = 'http://' + ip + ':' + host_port + '/'
     device = ET.SubElement(root, 'device')
     ET.SubElement(device, 'deviceType').text = 'urn:schemas-upnp-org:device:Basic:1'
     ET.SubElement(device, 'friendlyName').text = friendly_name
-    #I know this sounds wrong, but that's what the Canon App does as well, so whatever
+    # I know this sounds wrong, but that's what the Canon App does as well, so whatever
     ET.SubElement(device, 'manufacturer').text = 'CANON INC.'
     ET.SubElement(device, 'manufacturerURL').text = 'http://www.canon.com/'
     ET.SubElement(device, 'modelDescription').text = 'Canon Mobile Simulator'
@@ -378,7 +378,7 @@ def makeMobileDevDesc():
     nsElement2 = ET.SubElement(service, 'ns:X_ExtActionVer')
     nsElement2.text = '1.0'
     nsElement2.set('xmlns:ns', "urn:schemas-canon-com:schema-imink")
-    #meaning of X_VendorExtVer unkown to me
+    # meaning of X_VendorExtVer unkown to me
     nsElement3 = ET.SubElement(service, 'ns:X_VendorExtVer')
     nsElement3.text = '1-1502.0.0.0'
     nsElement3.set('xmlns:ns', "urn:schemas-canon-com:schema-imink")
@@ -398,18 +398,17 @@ def extractThumbFromExifHeader(exitfbytes):
     much broader
     """
 
-
     exifbits = bitarray()
     exifbits.frombytes(exitfbytes)
 
     ffd8db = bitarray()
-    #FFDB was found as a common thing in all thumbs
+    # FFDB was found as a common thing in all thumbs
     ffd8db.frombytes(b'\xFF\xD8\xFF\xDB')
 
     ffd8s = exifbits.search(ffd8db)
     ffd9s = exifbits.search(ffd9)
 
-    #cut from the occurence of ffd8ffe1 to ffd9 but include ffd9 which is 16 BITS long
+    # cut from the occurence of ffd8ffe1 to ffd9 but incl. ffd9 (16 BITS long)
     for i in range(0, len(ffd8s)):
         if ffd9s[len(ffd9s)-1]+16 - ffd8s[i] > 0:
             exifbits = exifbits[ffd8s[i]:ffd9s[len(ffd9s)-1]+16]
@@ -421,19 +420,19 @@ def extractThumbFromExifHeader(exitfbytes):
             return exifbits.tobytes()
 
 def getThumb(number):
-    #make sure we don't request an invalid EXIF header / thumb
+    # make sure we don't request an invalid EXIF header / thumb
     if number < totalNumOfItemsOnCamera:
-        #fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
-        #10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
+        # fetch EXIF-header which contains a small thumb, remember the thumb is designed to show up on small medium-dense camera screen not a 4k tablet
+        # 10.42.0.179:8615/MobileConnectedCamera/ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=30528944
         r2 = get(baseURL + 'ObjParsingExifHeaderList?ListNum=1&ObjIDList-1=' + str(cameraObjects[number]['objID']))
-        #TODO: do this in a new thread for a SLIGHT performance improvement if 0.02s per preview image on a shitty CPU
+        # TODO: do this in a new thread for a SLIGHT performance improvement if 0.02s per preview image on a shitty CPU
         #-----------------------process EXIF tags-------------------------------------------------------
 
-        #get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
+        # get tags, princess exifread won't notice vincent is just three (thousand) bytes stacked in a trenchcoat
         bitcent = bitarray()
         bitcent.frombytes(r2.content)
         if cameraObjects[number]['objType'] != "CR2":
-            #all other files seem to have a JPEG/exif header, even Videos
+            # all other files seem to have a JPEG/exif header, even Videos
             exifstart = bitcent.search(ffd8)[0]
             vincentAdultman = BufferedRandom(BytesIO())
             vincentAdultman.write(bitcent[exifstart:len(bitcent)-exifstart].tobytes())
@@ -442,10 +441,10 @@ def getThumb(number):
             if debug:
                 with open('r2.txt', 'wb') as txt:
                     txt.write(r2.text.encode())
-            #read EXIF-tags but don't process the thumb (method below is much faster)
+            # read EXIF-tags but don't process the thumb (method below is much faster)
             tags = exifread.process_file(vincentAdultman, details=False)
-            #print(tags)
-            #put relevant tags into cameraObjects
+            # print(tags)
+            # put relevant tags into cameraObjects
             cameraObjects[number]['Resolution'] = str(tags['EXIF ExifImageWidth']) + 'x' + str(tags['EXIF ExifImageLength'])
             if int(str(tags['EXIF ExifImageWidth'])) != 160:
                 cameraObjects[number]['SizeAbrv'] = getImageSizeAbbrevation(str(tags['Image Model']), str(tags['EXIF ExifImageWidth']))
@@ -455,13 +454,13 @@ def getThumb(number):
             dt = str(tags['EXIF DateTimeDigitized'])
             cameraObjects[number]['Date'] = dt.translate({ord(c): None for c in ': '})
         else:
-            #it's a RAW file, the header is very different from the JPEG so it's just set to some defaults
+            # it's a RAW file, the header is very different from the JPEG so it's just set to some defaults
             cameraObjects[number]['Resolution'] = 'RAW'
-            #RAWs (CR2 are a subclass of them) are always unscaled
+            # RAWs (CR2 are a subclass of them) are always unscaled
             cameraObjects[number]['SizeAbrv'] = 'L'
-            #we don't know but it's not worth the effort
+            # we don't know but it's not worth the effort
             cameraObjects[number]['Orientation'] = 'Horizontal'
-        #save some important tags
+        # save some important tags
         return extractThumbFromExifHeader(r2.content)
 
 def getImageSizeAbbrevation(imageModel, imageWidth):
@@ -495,7 +494,7 @@ if not GUIdevOnly:
 
 if not GUIdevOnly:
 
-    #We're in like Flinn
+    # We're in like Flinn
     baseURL = 'http://' + cameraIP + ':8615/MobileConnectedCamera/'
     resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
     if debug: print(resp.status_code, resp.content)
@@ -505,43 +504,45 @@ if not GUIdevOnly:
     if debug: print(resp.status_code, resp.content)
 if GUIdevOnly or resp.status_code == 200:
     if not GUIdevOnly:
-        #removing the namespaces makes parsing much simpler
+        # removing the namespaces makes parsing much simpler
         resultSet = ET.fromstring(removeXMLNamespace(resp.content.decode("utf-8")))
         totalNumOfItemsOnCamera = int(resultSet.find('TotalNum').text)
 
         """
-        cameraObjects is a list, starting at the oldest object, of dictionaries containing
-        objID: unique identifier of each picture given to it by the camera, required for loading the EXIF header and downloadig the image
+        cameraObjects is a list, starting at the oldest object, of dictionaries
+        containing objID: unique identifier of each picture given to it by the
+        camera, required for loading the EXIF header and downloadig the image
         objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
-        groupNbr: number of pictures in a group of pictures taken in CreativeShot mode, all of them seem to be refferenced by the same ID
+        groupNbr: number of pictures in a group of pictures taken in
+        CreativeShot mode, all of them seem to be refferenced by the same ID
         """
         cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)]
 
-        #get IDs, types and groups
+        # get IDs, types and groups
         objectsIndexed = 0
         while objectsIndexed < totalNumOfItemsOnCamera:
-            #http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
+            # http://192.168.0.106:8615/MobileConnectedCamera/GroupedObjIDList?StartIndex=1&ObjType=ALL&GroupType=1
             r = get(baseURL + 'GroupedObjIDList?StartIndex=' + str(objectsIndexed +1) + '&MaxNum=100&ObjType=ALL&GroupType=1')
             resultSet = ET.fromstring(removeXMLNamespace(r.text) )
             if debug: print(resultSet)
             for listID in range(1,int(resultSet.find('ListCount').text) + 1):
                 listIDStr = str(listID)
-                #find dictionary entries
+                # find dictionary entries
                 groupNbr = resultSet.find('GroupedNumList-' + listIDStr).text
                 objType = resultSet.find('ObjTypeList-' + listIDStr).text
                 objID = resultSet.find('ObjIDList-' + listIDStr).text
-                #add dictionary of current object to the listd
+                # add dictionary of current object to the listd
                 cameraObjects[objectsIndexed]={'objID':objID, 'objType':objType, 'groupNbr':groupNbr}
 
                 objectsIndexed += 1
-                #picture groups from creative shots count as one item since they have only one ID afaik
+                # picture groups from creative shots count as one item since they have only one ID afaik
                 if int(groupNbr) != 0:
                     totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
 
             if debug: print('Got soo many Elements:' + str(objectsIndexed))
         if debug: print(cameraObjects)
 
-    #start GUI to display thumbs
+    # start GUI to display thumbs
 
     class LiveShootWindow(QMainWindow):
         def __init__(self, parent=None):
@@ -561,26 +562,26 @@ if GUIdevOnly or resp.status_code == 200:
 
             sleep(1.5)
             print('PTP-IP started')
-            #op-code 0x9114: TP_OC_CANON_EOS_SetRemoteMode
+            # op-code 0x9114: TP_OC_CANON_EOS_SetRemoteMode
             ptpip_cmd =  PtpIpCmdRequest(cmd=0x9114, param1=0x11)
             ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
             print('9114 apended')
             sleep(1.5)
-            #op-code 0x9115: PTP_OC_CANON_EOS_SetEventMode
+            # op-code 0x9115: PTP_OC_CANON_EOS_SetEventMode
             ptpip_cmd = PtpIpCmdRequest(cmd=0x9115, param1=0x2)
             ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
             print('9115 appended')
 
             sleep(1.5)
-            #op-code 0x9116: PTP_OC_CANON_EOS_GetEvent
-            #This retrieves configuration status/updates/changes on EOS cameras. It reads a datablock which has a list of variable sized structures.
+            # op-code 0x9116: PTP_OC_CANON_EOS_GetEvent
+            # This retrieves configuration status/updates/changes on EOS cameras. It reads a datablock which has a list of variable sized structures.
             ptpip_cmd = PtpIpCmdRequest(cmd=0x09116)
             ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
             print('9116 appended')
 
             sleep(1.5)
-            #op-code 0x9110: PTP_OC_CANON_EOS_SetDevicePropValueEx
-            #some value(s) is/are set, in my dump it's
+            # op-code 0x9110: PTP_OC_CANON_EOS_SetDevicePropValueEx
+            # some value(s) is/are set, in my dump it's
             '''ptpip_cmd = PtpIpCmdRequest(cmd=0x09110)
             ptpip_packet = ptpip.cmd_queue.append(ptpip_cmd)
             print('9110 sent')
@@ -591,8 +592,8 @@ if GUIdevOnly or resp.status_code == 200:
     class HelloWindow(QMainWindow):
         def __init__(self):
             QMainWindow.__init__(self)
-            #TODO: proper window sizing
-            #self.setMinimumSize(QSize(1800, 1000))
+            # TODO: proper window sizing
+            # self.setMinimumSize(QSize(1800, 1000))
             self.setWindowTitle("Cannon Connext")
 
             self.liveShootWindow = LiveShootWindow(self)
@@ -633,10 +634,10 @@ if GUIdevOnly or resp.status_code == 200:
         def startLiveview(self):
             '''initiate the live view remote show window'''
             self.stopThumbLoading()
-            #stop object transer
+            # stop object transer
             resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             if resp.status_code == 200:
-                #request the initiation of PTP
+                # request the initiation of PTP
                 resp = postFileGetResponse(baseURL + 'UsecaseStatus?Name=RemoteCapture&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
                 print(resp)
                 if resp.status_code == 200:
@@ -646,126 +647,127 @@ if GUIdevOnly or resp.status_code == 200:
 
         def downloadSelected(self):
             '''Downlaod all selected items, further refered to as stack'''
-            #stop loading thumbs
-            #TODO: continue loading after download is finished
+            # stop loading thumbs
+            # TODO: continue loading after download is finished
             self.stopThumbLoading()
 
-            #show progress dialog
+            # show progress dialog
             progressDialog = QProgressDialog("Initiating Download ...", "Cancel", 0, 100, self)
             progressDialog.setWindowModality(Qt.WindowModal)
             progressDialog.setWindowTitle("Downloading " + str(len(self.listWidget.selectedItems())) + " Pictures and Videos")
             progressDialog.setMinimumDuration(0)
 
-            #total size of stack in bits (for showing the progress indicator)
+            # total size of stack in bits (for showing the progress indicator)
             totalSize = 0
             totalDownloadedBits = 0
-            #calculate totalSize and save each item's size in order to download it
+            # calculate totalSize and save each item's size in order to download it
             for item in self.listWidget.selectedItems():
                 currentNumber = item.getObjectNumber()
                 currentID = cameraObjects[currentNumber]['objID']
                 currentType = cameraObjects[currentNumber]['objType']
-                #get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
-                #http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
+                # get object properties (the resolution is already parsed from EXIF but oddly the size is required to get the image)
+                # http://10.42.0.179:8615/MobileConnectedCamera/ObjProperty?ObjID=30528640&ObjType=JPG
                 r = get(baseURL + 'ObjProperty?ObjID=' + currentID + '&ObjType=' + currentType)
-                #TODO: do better error handling here
+                # TODO: do better error handling here
                 if r.status_code == 200:
-                    #save dataSize for actual downloading
+                    # save dataSize for actual downloading
                     cameraObjects[currentNumber]['dataSize'] = int(ET.fromstring(removeXMLNamespace(r.text)).find('DataSize').text)
                     totalSize += cameraObjects[currentNumber]['dataSize']
                 else:
                     print('ERROR requesting object with ID:', currentID, 'failed')
                     print("response:", r)
-            #reset dialog
+
+            # reset dialog
             progressDialog.setValue(0)
             progressDialog.setAutoClose(True)
-            #Download stack
+            # Download stack
             for item in self.listWidget.selectedItems():
                 currentNumber = item.getObjectNumber()
                 currentID = cameraObjects[currentNumber]['objID']
                 currentDataSize= cameraObjects[currentNumber]['dataSize']
                 currentType = cameraObjects[currentNumber]['objType']
                 receivedBytes = b''
+                # the response delivers the preparation status via <ObjStatus>PREPARING</ObjStatus> (other texts haven't been observed by me)
+                # and progress via <Progress>x</Progress> in the resultSet xml with x = 0-100
+                url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + currentType + '&ResizeDataSize=' + str(currentDataSize)
+                r = get(url)
 
-                #for MP4 Download: need to wait until processing/resizing/converting is done
-                if currentType == 'MP4':
-                    print("waiting for mp4 processing")
-                    progressDialog.setLabelText("Waiting for camera to convert video")
-                    progressDialog.setMaximum(100)
-                    #the response delivers the preparation status via <ObjStatus>PREPARING</ObjStatus> (other texts haven't been observed by me)
-                    #and progress via <Progress>x</Progress> in the resultSet xml with x = 0-100
-                    url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + currentType + '&ResizeDataSize=' + str(currentDataSize)
+                '''# get continous status updates, in the pcap they were under 0.01s apart sometimes so no need to worry about spam
                     r = get(url)
-                    if r.text.find('<ObjStatus>') != -1:
-                        preparingVideo = True
-                        while preparingVideo == True:
-                            #get continous status updates, in the pcap they were under 0.01s apart sometimes so no need to worry about spam
-                            r = get(url)
-                            responseXML = ""
-                            multipart_data = decoder.MultipartDecoder.from_response(r)
-                            for part in multipart_data.parts:
-                                if b'text/xml' in part.headers[b'Content-Type']:
-                                     responseXML += part.content.decode('utf-8')
-                            if r.status_code == 200:
-                                if r.text.find('<ObjStatus>') != -1:
-                                    #somehow the XML doesn't seem to be the only content or requests v2.22.0 doesn't detect properly
-                                    #resultXml = r.text[r.text.index("<?xml"):r.text.rindex(">")+1]
-                                    #todo: put this into a try
-                                    progress = int(ET.fromstring(removeXMLNamespace(responseXML)).find('Progress').text)
-                                    progressDialog.setValue(progress)
-                                    if debug: print("Progress: ", progress)
+                    if r.status_code != 200:
+                        print('ERROR requesting object with ID:', currentID, 'failed')
+                        print("response:", r)
 
-                                else:
-                                    #preparation should be done now
-                                    if debug: print("mp4 processing done")
-                                    preparingVideo = False
-                                    #get actal data size (converting changes it, so we might get odd looking requests, where we seem to request beyond the end because we won't change the ResizeDataSize in the requests, but don't worry Canon does the same)
-                                    actualDataSize = int(ET.fromstring(removeXMLNamespace(responseXML)).find('TotalSize').text)
-                                    if debug: print("actual video size:", actualDataSize)
-                                    #correct the total size
-                                    totalSize = totalSize - currentDataSize + actualDataSize
-                                    #empty the first set of data
-                                    currentDataSize = actualDataSize
-                                    for part in multipart_data.parts:
-                                        if b'application/octet-stream' in part.headers[b'Content-Type']:
-                                             receivedBytes += part.content
-                                             totalDownloadedBits += len(part.content)
-                                             progressDialog.setValue(totalDownloadedBits)
-                            else:
-                                print('ERROR requesting object with ID:', currentID, 'failed')
-                                print("response:", r)
+                    else:
+                        # preparation should be done now
+                        if debug: print("mp4 processing done")
+                        preparingVideo = False
+                        # get actal data size (converting changes it, so we might get odd looking requests, where we seem to request beyond the end because we won't change the ResizeDataSize in the requests, but don't worry Canon does the same)
 
+                        for part in multipart_data.parts:
+                            if b'application/octet-stream' in part.headers[b'Content-Type']:
+                                 receivedBytes += part.content
+                                 totalDownloadedBits += len(part.content)
+                                 progressDialog.setValue(totalDownloadedBits)'''
+                progress = -1
                 while len(receivedBytes) < currentDataSize:
-                    #get the image, unresized:
-                    #same for MP4, except ObjType=MP4
-                    #10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
+                    # get the image, unresized:
+                    # same for MP4, except ObjType=MP4
+                    # 10.42.0.179:8615/MobileConnectedCamera/ObjData?ObjID=30791920&ObjType=JPG&ResizeDataSize=679726
                     url = baseURL + 'ObjData?ObjID=' + cameraObjects[currentNumber]['objID'] + '&ObjType=' + currentType + '&ResizeDataSize=' + str(currentDataSize)
                     if len(receivedBytes) != 0:
                         url += '&Offset=' + str(len(receivedBytes))
                     r = get(url)
                     if r.status_code == 200:
-                        #set/update the progress bar
-                        progressDialog.setMaximum(totalSize)
-                        progressDialog.setLabelText("Downloading and saving files (" + str(round(totalSize/1000000,1)) + "MB)")
+                        if r.text.find('<ObjStatus>') != -1 and currentType == 'MP4':
+                            #need to wait for the video to be converted on Camera, it's down to 720p30 for Canon G7X
+                            if progress == -1:  progress = 0
+                            progressDialog.setTextLabel("Camera is preparing video")
+                            progressDialog.setMaximum(100)
+                        else:
+                            # set/update the progress bar
+                            progress = 100
+                            progressDialog.setMaximum(totalSize)
+                            progressDialog.setLabelText("Downloading and saving files (" + str(round(totalSize/1000000,1)) + "MB)")
 
                         multipart_data = decoder.MultipartDecoder.from_response(r)
                         for part in multipart_data.parts:
-                            if b'application/octet-stream' in part.headers[b'Content-Type']:
+                            if b'application/octet-stream' in part.headers[b'Content-Type'] and progress < 100:
                                  receivedBytes += part.content
                                  totalDownloadedBits += len(part.content)
                                  progressDialog.setValue(totalDownloadedBits)
                                  if len(receivedBytes) == currentDataSize:
                                      with open('CanonConnext/' + cameraObjects[int(currentNumber)]['Date'] + '.' + currentType, 'wb') as file:
                                         file.write(receivedBytes)
+                            if progress in range(0,100) and b'text/xml' in part.headers[b'Content-Type']:
+                                responseXML = part.content.decode('utf-8')
+                                progressTag = ET.fromstring(removeXMLNamespace(responseXML)).find('Progress')
+                                if progressTag != None:
+                                    progress = int(progressTag.text)
+                                    progressDialog.setValue(progress)
+                                    if debug: print("Progress: ", progress)
+                                #check for TotalSize which contains the size of the re-encoded video
+                                sizeTag = ET.fromstring(removeXMLNamespace(responseXML)).find('TotalSize')
+                                if sizeTag != None:
+                                    actualDataSize = int(sizeTag.text)
+                                    if debug: print("actual video size:", actualDataSize)
+                                    # correct the total size
+                                    totalSize = totalSize - currentDataSize + actualDataSize
+                                    # empty the first set of data
+                                    currentDataSize = actualDataSize
+                                    # set progress to 101 to indicate that this should not be repeated
+                                    progress = 101
+
                     else:
                         print('ERROR requesting object with ID:', currentID, 'failed')
                         print("response:", r)
 
         def disconnectAndClose(self):
-            #tell Camera to turn off and close app
+            # tell Camera to turn off and close app
             self.stopThumbLoading()
             postFileGetResponse(baseURL + 'UsecaseStatus?Name=ObjectPull&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusStop.xml')
             self.obj.shutDownCamera()
-            #self.close()
+            # self.close()
 
         def stopThumbLoading(self):
             self.obj.stop()
@@ -797,11 +799,11 @@ if GUIdevOnly or resp.status_code == 200:
         def runner(self):
             for i in range(1,totalNumOfItemsOnCamera):
                 qp = QPixmap()
-                #we want to see newest first but numbering starts at oldest
+                # we want to see newest first but numbering starts at oldest
                 currentID = totalNumOfItemsOnCamera-i
                 qp.loadFromData(getThumb(currentID))
 
-                #rotate pixmap
+                # rotate pixmap
                 if cameraObjects[currentID]['Orientation'] ==  'Rotated 90 CW':
                     qp = qp.transformed(QTransform().rotate(90))
 
@@ -811,7 +813,7 @@ if GUIdevOnly or resp.status_code == 200:
                 self.addPic.emit(qp, cameraObjects[currentID]['objType'] + " " + cameraObjects[currentID]['SizeAbrv'], currentID)
                 if self.stopNow:
                     break
-            #self.finished.emit()
+            # self.finished.emit()
 
         def stop(self):
             self.stopNow = True
@@ -820,14 +822,14 @@ if GUIdevOnly or resp.status_code == 200:
             sleep(2)
             postFileGetResponse(baseURL + 'UsecaseStatus?Name=Disconnect&MajorVersion=1&MinorVersion=0', 'POSTrequests/statusRun.xml')
             postFileGetResponse(baseURL + 'DisconnectStatus', 'POSTrequests/powerOff.xml')
-            #SSDP byebye
+            # SSDP byebye
             sendNotify(stage='byebye')
-            #ssdpThread.quit()
-            #iminkThread.quit()
+            # ssdpThread.quit()
+            # iminkThread.quit()
             self.finished.emit()
 
     app = QtWidgets.QApplication(sys.argv)
-    #app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
+    # app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     mainWin = HelloWindow()
     mainWin.show()
     if not GUIdevOnly:
