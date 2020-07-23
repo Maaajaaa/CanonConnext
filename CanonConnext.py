@@ -44,7 +44,6 @@ totalNumOfItemsOnCamera = 0
 for iface in ni.interfaces():
     # temporary fix for the problem of having multiple interfaces and choosing the right one
     if iface[0] == 'w':
-    #if iface == 'enp2s0':
         if ni.AF_INET in ni.ifaddresses(iface):
             print("interface", iface)
             possibleIp = ni.ifaddresses(iface)[ni.AF_INET][0]['addr']
@@ -90,63 +89,44 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
     server_version = 'OS/Version UPnP/1.0'
     sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
 
+    def sendReplyFromFile(file):
+        with open(file) as replyFile:
+            replyStr = replyFile.read()
+            self.sendResponse(replyStr)
+
     def do_POST(self):
         """Methode to handle POST requests."""
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
         bodyStr = body.decode('utf-8')
-        requestKnown = False
 
         # Detecting Run status request and answering with statusReplyRun.xml:
         if '<Status>Run</Status>' in bodyStr:
-            requestKnown = True
-            # TODO: put this in a try loop
-            with open('GETreplies/statusRunReply.xml') as replyFile:
-                    replyStr = replyFile.read()
-                    self.sendResponse(replyStr)
+            sendReplyFromFile('GETreplies/statusRunReply.xml')
             if debug:print('Status Run request handled')
-            return
 
         # Acknowledge CapabilityInfo
-        if '<Pull_Operating>' in bodyStr:
-            requestKnown = True
-            with open('GETreplies/null.xml') as replyFile:
-                    replyStr = replyFile.read()
-                    self.sendResponse(replyStr)
+        elif '<Pull_Operating>' in bodyStr:
+            sendReplyFromFile('GETreplies/null.xml')
             if debug:print('CapabilityInfo acknowledged')
-            return
 
         # Acknowledge CameraInfo
-        if '<CardProtect>' in bodyStr:
-            requestKnown = True
-            with open('GETreplies/null.xml') as replyFile:
-                    replyStr = replyFile.read()
-                    self.sendResponse(replyStr)
+        elif '<CardProtect>' in bodyStr:
+            sendReplyFromFile('GETreplies/null.xml')
             if debug:print('CameraInfo acknowledged')
-            return
 
         # Acknowledge NCFData
-        if '<AARData>' in bodyStr:
-            requestKnown = True
-            with open('GETreplies/null.xml') as replyFile:
-                    replyStr = replyFile.read()
-                    self.sendResponse(replyStr)
+        elif '<AARData>' in bodyStr:
+            sendReplyFromFile('GETreplies/null.xml')
             if debug:print('NFCData acknowledged')
-            return
 
         # Detect Status Stop
-        if '<Status>Stop</Status>' in bodyStr:
-            requestKnown = True
-            # TODO: put this in a try loop
-            with open('GETreplies/statusStopReply.xml') as replyFile:
-                    replyStr = replyFile.read()
-                    self.sendResponse(replyStr)
+        elif '<Status>Stop</Status>' in bodyStr:
+            sendReplyFromFile('GETreplies/statusStopReply.xml')
             print("Status Stop request handled, in other words: We're in")
             global connectedToCamera
-            connectedToCamera = True
-            return
-
-        if not requestKnown:
+        # unkown request
+        else:
             response = BytesIO()
             self.send_response(200)
             self.end_headers()
@@ -159,7 +139,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
 
     def sendResponse(self, bodyStr):
         """Takes a string and sends it as a reponse to a GET-request with apporpriate headers"""
-        # header
+        # header, canon coded substandard and requires a specific order of header entries
         content_length = len(str.encode(bodyStr))
         if content_length == 0:
             self.send_response_only(HTTPStatus.OK)
@@ -540,7 +520,7 @@ if GUIdevOnly or resp.status_code == 200:
                 if int(groupNbr) != 0:
                     totalNumOfItemsOnCamera -= (int(groupNbr) - 1)
 
-            if debug: print('Got soo many Elements:' + str(objectsIndexed))
+        if debug: print('Got soo many Elements:' + str(objectsIndexed))
         #if debug: print(cameraObjects)
 
     # start GUI to display thumbs
@@ -643,8 +623,10 @@ if GUIdevOnly or resp.status_code == 200:
                 print(resp)
                 if resp.status_code == 200:
                     print("Start gphoto now, camera IP is:", cameraIP)
-                    self.liveShootWindow.show()
-                    self.liveShootWindow.startStream()
+                    print("command example:")
+                    print("gphoto2 --port ptpip:192.168.0.1:15740 --camera \"Canon Powershot G7 X\"")
+                    #self.liveShootWindow.show()
+                    #self.liveShootWindow.startStream()
 
         def downloadSelected(self):
             '''Downlaod all selected items, further refered to as stack'''
