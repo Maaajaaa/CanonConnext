@@ -125,6 +125,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
             self.sendReplyFromFile('GETreplies/statusStopReply.xml')
             print("Status Stop request handled, in other words: We're in")
             global connectedToCamera
+            connectedToCamera = True
         # unkown request
         else:
             response = BytesIO()
