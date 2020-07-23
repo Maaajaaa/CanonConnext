@@ -89,7 +89,7 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
     server_version = 'OS/Version UPnP/1.0'
     sys_version = 'UPeNd/1.5 cHttpdHandlerSock'
 
-    def sendReplyFromFile(file):
+    def sendReplyFromFile(self, file):
         with open(file) as replyFile:
             replyStr = replyFile.read()
             self.sendResponse(replyStr)
@@ -102,27 +102,27 @@ class iminkRequestHandler(SimpleHTTPRequestHandler):
 
         # Detecting Run status request and answering with statusReplyRun.xml:
         if '<Status>Run</Status>' in bodyStr:
-            sendReplyFromFile('GETreplies/statusRunReply.xml')
+            self.sendReplyFromFile('GETreplies/statusRunReply.xml')
             if debug:print('Status Run request handled')
 
         # Acknowledge CapabilityInfo
         elif '<Pull_Operating>' in bodyStr:
-            sendReplyFromFile('GETreplies/null.xml')
+            self.sendReplyFromFile('GETreplies/null.xml')
             if debug:print('CapabilityInfo acknowledged')
 
         # Acknowledge CameraInfo
         elif '<CardProtect>' in bodyStr:
-            sendReplyFromFile('GETreplies/null.xml')
+            self.sendReplyFromFile('GETreplies/null.xml')
             if debug:print('CameraInfo acknowledged')
 
         # Acknowledge NCFData
         elif '<AARData>' in bodyStr:
-            sendReplyFromFile('GETreplies/null.xml')
+            self.sendReplyFromFile('GETreplies/null.xml')
             if debug:print('NFCData acknowledged')
 
         # Detect Status Stop
         elif '<Status>Stop</Status>' in bodyStr:
-            sendReplyFromFile('GETreplies/statusStopReply.xml')
+            self.sendReplyFromFile('GETreplies/statusStopReply.xml')
             print("Status Stop request handled, in other words: We're in")
             global connectedToCamera
         # unkown request
