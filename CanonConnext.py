@@ -32,7 +32,7 @@ from threading import Thread
 
 # ---- GLOBAL VARIABLES -------
 
-runSSDPOnAndOn = True
+runSSDP = True
 connectedToCamera = False
 debug = True
 
@@ -192,10 +192,10 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
                 fname = os.path.basename(f.name)
                 if self.CCMRequested is False and 'CameraConnectedMobile.xml' in fname:
                     self.CCMRequested = True
-                    global runSSDPOnAndOn
-                    runSSDPOnAndOn = False
+                    global runSSDP
+                    runSSDP = False
 
-                    r = get('http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=7B788B31-EC1E-445A-B5EF-243274B188F6')
+                    r = get('http://' + cameraIP + ':49152/desc_iml/MobileConnectedCamera.xml?uuid=' + uuid)
                     MobileConnectedCamera = r.text
                     if debug: print("\n\nGot MobileConnectedCamera.xml:\n", MobileConnectedCamera, "\n\n")
             finally:
@@ -273,7 +273,7 @@ def defineNotifications(stage):
             '\r\n'
 
         notifyExtension[1] = \
-            'NT: uuid:7B788B31-EC1E-445A-B5EF-243274B188E5\r\n' \
+            'NT: uuid:' + uuid + '\r\n' \
             'USN: uuid:' + uuid + '\r\n' \
             '\r\n'
 
@@ -466,7 +466,7 @@ if not GUIdevOnly:
     iminkThread = threading.Thread(target=imink_response_sever)
     iminkThread.start()
     while not connectedToCamera:
-        if runSSDPOnAndOn:
+        if runSSDP:
             getCameraDevDesc()
             makeMobileDevDesc()
             sendNotify(stage='alive')
