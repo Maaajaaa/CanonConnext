@@ -56,7 +56,7 @@ if not ip:
     print("ERROR: could not get device's IP-Adress")
     sys.exit(1)
 
-host_port = '49152'
+host_port = '49155'
 
 # DEVICE SETTINGS
 
@@ -205,7 +205,7 @@ class SSDP_RequestHandler(SimpleHTTPRequestHandler):
 def start_ssdp_response_server():
     print('starting server in separate thread')
     # change dir to serverFiles
-    server_address = ('', 49152)
+    server_address = ('', 49155)
     server = HTTPServer(server_address, SSDP_RequestHandler)
     server.serve_forever()
 
@@ -237,7 +237,7 @@ def defineNotifications(stage):
             'NOTIFY * HTTP/1.1\r\n' \
             'Host: 239.255.255.250:1900\r\n' \
             'Cache-Control: max-age=1800\r\n' \
-            'Location: http://'+ ip + ':' + host_port + '/MobileDevDesc.xml\r\n' \
+            'Location: http://'+ ip + ':' + host_port + '/upnp/dev/2188b849-f71e-4b2d-aaf3-ee57761a9975/desc\r\n' \
             'Server: Camera OS/1.0 UPnP/1.0 ' + system + '/' + friendly_name + '/1.0\r\n'\
             'NTS: ssdp:alive\r\n' \
 
@@ -367,7 +367,7 @@ def makeMobileDevDesc():
     ET.SubElement(device, 'presentationURL').text = '/'
 
     tree = ET.ElementTree(root)
-    tree.write("MobileDevDesc.xml")
+    #tree.write("upnp/dev/2188b849-f71e-4b2d-aaf3-ee57761a9975/desc")
 
 def removeXMLNamespace(xmlstring):
     xmlstring = re.sub(r'\sxmlns="[^"]+"', '', xmlstring, count=1)
@@ -493,10 +493,10 @@ if GUIdevOnly or resp.status_code == 200:
         """
         cameraObjects is a list, starting at the oldest object, of dictionaries
         containing objID: unique identifier of each picture given to it by the
-        camera, required for loading the EXIF header and downloadig the image
+        camera, required for loading the EXIF header and downloading the image
         objType: type of picture/video, can be JPEG, CR2, JPEG+CR2 or MP4?
         groupNbr: number of pictures in a group of pictures taken in
-        CreativeShot mode, all of them seem to be refferenced by the same ID
+        CreativeShot mode, all of them seem to be referenced by the same ID
         """
         cameraObjects = [{} for i in range(totalNumOfItemsOnCamera)]
 
